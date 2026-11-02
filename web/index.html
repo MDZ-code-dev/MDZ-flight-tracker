@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <title>MDZ SkyScan</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="panel topbar">
+      <div>
+        <div class="logo">✈ MDZ SKYSCAN</div>
+        <div class="subtitle">LIVE AIRCRAFT TRACKER // SWITCH EDITION</div>
+      </div>
+      <div class="actions">
+        <span id="status" class="status loading">CONNECT</span>
+        <button id="modeBtn">MODE: NEAREST</button>
+        <button id="settingsBtn">SETTINGS</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="nearestMode" class="mode active nearest-grid">
+        <article class="panel nearest-card">
+          <div class="eyebrow">◆ NEAREST AIRCRAFT</div>
+          <div id="callsign" class="callsign">SCANNING</div>
+          <div id="typeLine" class="type-line">WAITING FOR LIVE DATA...</div>
+
+          <div class="info-grid">
+            <div class="box"><small>REGISTRATION</small><strong id="registration">---</strong></div>
+            <div class="box"><small>ICAO HEX</small><strong id="hex">---</strong></div>
+            <div class="box"><small>AIRCRAFT</small><strong id="description">---</strong></div>
+            <div class="box"><small>SQUAWK</small><strong id="squawk">---</strong></div>
+          </div>
+
+          <div class="distance-row">
+            <div><small>DISTANCE</small><div id="distance" class="distance">--.- NM</div></div>
+            <div id="bearing" class="bearing">---° ---</div>
+          </div>
+        </article>
+
+        <article class="panel stats-card">
+          <div class="eyebrow">◆ FLIGHT DATA</div>
+          <div class="stats-grid">
+            <div class="box"><small>ALTITUDE</small><strong id="altitude">---</strong></div>
+            <div class="box"><small>GROUND SPEED</small><strong id="speed">---</strong></div>
+            <div class="box"><small>VERTICAL RATE</small><strong id="vertical">---</strong></div>
+            <div class="box"><small>HEADING</small><strong id="heading">---</strong></div>
+            <div class="box"><small>BEARING FROM YOU</small><strong id="bearing2">---</strong></div>
+            <div class="box"><small>IN RANGE</small><strong id="count">0</strong></div>
+          </div>
+          <div class="track-strip">
+            <small>TRACK VECTOR</small>
+            <div id="headingBig">---°</div>
+          </div>
+        </article>
+      </section>
+
+      <section id="radarMode" class="mode radar-grid">
+        <article class="panel radar-card">
+          <div class="radar-title">RADAR // <span id="radarRange">80 NM</span></div>
+          <canvas id="radar"></canvas>
+        </article>
+        <article class="panel contacts-card">
+          <div class="eyebrow">◆ NEARBY CONTACTS</div>
+          <div id="planeList" class="plane-list"></div>
+        </article>
+      </section>
+    </main>
+
+    <footer>
+      <span id="updated">LAST UPDATE: --:--:--</span>
+      <span>DATA: ADSB.LOL • ODbL</span>
+      <span id="rangeFooter">RANGE: 80 NM</span>
+    </footer>
+  </div>
+
+  <div id="settingsModal" class="modal">
+    <div class="modal-card">
+      <h2>TRACKER LOCATION</h2>
+      <p>The Switch has no GPS. Use browser location if available or enter coordinates once.</p>
+      <div class="form-grid">
+        <label>LATITUDE<input id="lat" inputmode="decimal" placeholder="45.0000"></label>
+        <label>LONGITUDE<input id="lon" inputmode="decimal" placeholder="-75.0000"></label>
+        <label>RADAR RANGE (NM)<input id="radius" inputmode="numeric" value="80"></label>
+        <label>REFRESH (SECONDS)<input id="refresh" inputmode="numeric" value="5"></label>
+      </div>
+      <div class="modal-actions">
+        <button id="geoBtn">USE MY LOCATION</button>
+        <button id="saveBtn">SAVE</button>
+        <button id="cancelBtn">CANCEL</button>
+      </div>
+      <div id="settingsMsg" class="message"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
