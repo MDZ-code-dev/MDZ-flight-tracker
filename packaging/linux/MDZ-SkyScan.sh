@@ -1,8 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 cd "$(dirname "$0")"
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "Install Python 3.10 or newer, then run this launcher again."
-  exit 1
+if [ -x .venv/bin/python ]; then
+  exec .venv/bin/python desktop.py
 fi
 exec python3 desktop.py

@@ -18,7 +18,7 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         package = Path(tmp) / "MDZ-SkyScan"
         package.mkdir()
-        for name in ("app.py", "desktop.py", "README.md"):
+        for name in ("app.py", "desktop.py", "desktop-requirements.txt", "README.md"):
             shutil.copy2(ROOT / name, package / name)
         shutil.copytree(ROOT / "web", package / "web")
         launcher = package / "MDZ-SkyScan.sh"

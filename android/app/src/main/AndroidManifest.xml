@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="dev.mdz.skyscan" android:versionCode="5" android:versionName="1.0.5">
+    package="dev.mdz.skyscan" android:versionCode="6" android:versionName="1.0.6">
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
     <uses-permission android:name="android.permission.INTERNET" />
     <application android:label="MDZ SkyScan" android:theme="@android:style/Theme.Material.NoActionBar"

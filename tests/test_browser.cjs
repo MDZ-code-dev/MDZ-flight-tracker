@@ -45,7 +45,7 @@ async function main() {
       await page.evaluate(() => document.fonts.ready);
       assert(await page.evaluate(() => Array.from(document.fonts).some(font =>
         font.family.replace(/["']/g,'') === 'SkyScan Pixel' && font.status === 'loaded')), 'Bundled pixel font did not load');
-      assert.equal(await page.locator('#appVersion').textContent(), 'v1.0.5');
+      assert.equal(await page.locator('#appVersion').textContent(), 'v1.0.6');
       if (width <= 850) await page.locator('#aircraftVisual').scrollIntoViewIfNeeded();
       for (const heading of [0,45,90,180,238,315]) {
         await page.evaluate(p => renderNearest(p,1), {...plane,track:heading});

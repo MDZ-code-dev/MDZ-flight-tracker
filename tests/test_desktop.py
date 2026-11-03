@@ -1,9 +1,7 @@
-import errno
 import json
 import os
 import tempfile
 import threading
-import time
 import unittest
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -14,7 +12,7 @@ import app
 import desktop
 
 
-class LauncherTests(unittest.TestCase):
+class NativeLauncherTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.environment = patch.dict(os.environ, {
@@ -22,70 +20,55 @@ class LauncherTests(unittest.TestCase):
         })
         self.environment.start()
         os.environ.pop("MDZ_TRACKER_PORT", None)
+        os.environ.pop("MDZ_DESKTOP_STATE_FILE", None)
+        self.view = Mock()
+        self.urls = []
+        self.view.create_window.side_effect = lambda title, url, **kwargs: self.urls.append(url)
 
     def tearDown(self):
         self.environment.stop()
         self.tmp.cleanup()
 
-    def test_matching_release_reuses_existing_server(self):
-        with patch.object(desktop, "read_health", return_value=app.health_payload()), \
-             patch.object(app, "TrackerHTTPServer") as create, \
-             patch.object(desktop.webbrowser, "open") as browser:
-            desktop.main()
-        create.assert_not_called()
-        browser.assert_called_once_with(f"http://127.0.0.1:{app.PORT}")
+    def assert_stopped(self, url):
+        with self.assertRaises(OSError):
+            urllib.request.urlopen(url + "/health", timeout=0.5)
 
-    def test_mismatched_build_gets_new_port_and_opens_that_release(self):
-        old = dict(app.health_payload(), build="old-build")
-        server = Mock(server_port=41234)
-        def start_now(*, target, **kwargs):
-            return Mock(start=target)
-        with patch.object(desktop, "read_health", side_effect=[old, app.health_payload()]), \
-             patch.object(app, "TrackerHTTPServer", return_value=server) as create, \
-             patch.object(desktop.threading, "Thread", side_effect=start_now), \
-             patch.object(desktop.webbrowser, "open") as browser, \
-             patch.object(app, "main") as run:
+    def test_real_backend_is_owned_by_window_and_stops_on_close(self):
+        observed = []
+        def window_loop(**kwargs):
+            with urllib.request.urlopen(self.urls[0] + "/health") as response:
+                observed.append(json.load(response))
+        self.view.start.side_effect = window_loop
+        with patch.object(desktop, "load_webview", return_value=self.view), \
+             patch("webbrowser.open") as browser:
             desktop.main()
-        create.assert_called_once_with((app.HOST, 0), app.Handler)
-        browser.assert_called_once_with("http://127.0.0.1:41234")
-        run.assert_called_once_with(server)
-
-    def test_explicit_busy_port_reports_how_to_resolve_it(self):
-        os.environ["MDZ_TRACKER_PORT"] = str(app.PORT)
-        with patch.object(desktop, "read_health", return_value={"ok": True}), \
-             patch.object(app, "TrackerHTTPServer") as create, \
-             patch.object(desktop.webbrowser, "open") as browser:
-            with self.assertRaisesRegex(RuntimeError, "unset MDZ_TRACKER_PORT"):
-                desktop.main()
+        self.assertEqual(observed, [app.health_payload()])
+        self.assertEqual(self.view.create_window.call_args.args[0], "MDZ SkyScan")
+        self.assertEqual(self.view.start.call_args.kwargs["debug"], False)
         browser.assert_not_called()
-        create.assert_not_called()
+        self.assert_stopped(self.urls[0])
 
-    def test_other_bind_errors_are_not_treated_as_old_servers(self):
-        with patch.object(desktop, "read_health", return_value=None), \
-             patch.object(app, "TrackerHTTPServer", side_effect=PermissionError(errno.EACCES, "denied")):
-            with self.assertRaises(PermissionError):
+    def test_gui_failure_still_stops_owned_backend(self):
+        self.view.start.side_effect = RuntimeError("Renderer failed")
+        with patch.object(desktop, "load_webview", return_value=self.view):
+            with self.assertRaisesRegex(RuntimeError, "Renderer failed"):
                 desktop.main()
+        self.assert_stopped(self.urls[0])
 
-    def test_windows_listener_collision_is_distinguished_from_permission_denial(self):
-        error = PermissionError(errno.EACCES, "denied")
-        error.winerror = 10013
-        with patch.object(desktop.socket, "create_connection") as connect:
-            self.assertTrue(desktop.occupied_port_error(error, "127.0.0.1", 8765))
-        connect.assert_called_once_with(("127.0.0.1", 8765), timeout=0.25)
-        with patch.object(desktop.socket, "create_connection", side_effect=ConnectionRefusedError):
-            self.assertFalse(desktop.occupied_port_error(error, "127.0.0.1", 8765))
+    def test_missing_gui_dependency_does_not_start_server_or_browser(self):
+        with patch.object(desktop, "load_webview", side_effect=RuntimeError("missing GUI")), \
+             patch.object(app, "TrackerHTTPServer") as create, patch("webbrowser.open") as browser:
+            with self.assertRaisesRegex(RuntimeError, "missing GUI"):
+                desktop.main()
+        create.assert_not_called()
+        browser.assert_not_called()
 
-    def test_windows_server_requests_exclusive_port_ownership(self):
-        server = app.TrackerHTTPServer.__new__(app.TrackerHTTPServer)
-        server.socket = Mock()
-        with patch.object(app.sys, "platform", "win32"), \
-             patch.object(app.socket, "SO_EXCLUSIVEADDRUSE", 4, create=True), \
-             patch.object(ThreadingHTTPServer, "server_bind"):
-            server.server_bind()
-        self.assertFalse(server.allow_reuse_address)
-        server.socket.setsockopt.assert_called_once_with(app.socket.SOL_SOCKET, 4, 1)
+    def test_dependency_error_explains_installation(self):
+        with patch.object(desktop.importlib, "import_module", side_effect=ImportError("webview")):
+            with self.assertRaisesRegex(RuntimeError, "desktop-requirements.txt"):
+                desktop.load_webview()
 
-    def test_old_server_keeps_running_while_updated_ui_opens_on_new_port(self):
+    def test_window_never_reuses_an_old_server(self):
         class OldHandler(BaseHTTPRequestHandler):
             def do_GET(self):
                 body = b'{"ok": true}'
@@ -93,45 +76,49 @@ class LauncherTests(unittest.TestCase):
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
-
             def log_message(self, *args):
                 pass
-
         old = ThreadingHTTPServer(("127.0.0.1", 0), OldHandler)
         old_thread = threading.Thread(target=old.serve_forever, daemon=True)
         old_thread.start()
-        opened = threading.Event()
-        urls = []
-        fresh_servers = []
-
-        def open_browser(url):
-            urls.append(url)
-            opened.set()
-
-        def run_fresh(server):
-            fresh_servers.append(server)
-            server.timeout = 0.1
-            deadline = time.monotonic() + 8
-            try:
-                while not opened.is_set() and time.monotonic() < deadline:
-                    server.handle_request()
-            finally:
-                server.server_close()
-
         try:
             with patch.object(app, "PORT", old.server_port), \
-                 patch.object(app, "main", side_effect=run_fresh), \
-                 patch.object(desktop.webbrowser, "open", side_effect=open_browser):
+                 patch.object(desktop, "load_webview", return_value=self.view):
                 desktop.main()
-            self.assertTrue(opened.wait(1), "Updated release was not opened")
-            self.assertNotEqual(urls[0], f"http://127.0.0.1:{old.server_port}")
-            self.assertEqual(len(fresh_servers), 1)
+            self.assertNotEqual(self.urls[0], f"http://127.0.0.1:{old.server_port}")
+            self.assert_stopped(self.urls[0])
             with urllib.request.urlopen(f"http://127.0.0.1:{old.server_port}/health") as response:
                 self.assertEqual(json.load(response), {"ok": True})
         finally:
             old.shutdown()
             old.server_close()
             old_thread.join()
+
+    def test_explicit_busy_port_does_not_take_over_existing_app(self):
+        old = ThreadingHTTPServer(("127.0.0.1", 0), app.Handler)
+        try:
+            os.environ["MDZ_TRACKER_PORT"] = str(old.server_port)
+            with patch.object(app, "PORT", old.server_port), \
+                 patch.object(desktop, "load_webview", return_value=self.view):
+                with self.assertRaisesRegex(RuntimeError, "unset MDZ_TRACKER_PORT"):
+                    desktop.main()
+            self.view.create_window.assert_not_called()
+        finally:
+            old.server_close()
+
+    def test_optional_runtime_diagnostics_and_windows_renderer(self):
+        state = Path(self.tmp.name) / "runtime.json"
+        os.environ["MDZ_DESKTOP_STATE_FILE"] = str(state)
+        with patch.object(desktop, "load_webview", return_value=self.view), \
+             patch.object(desktop.sys, "platform", "win32"):
+            desktop.main()
+        data = json.loads(state.read_text())
+        self.assertEqual(data["url"], self.urls[0])
+        self.assertEqual(data["pid"], os.getpid())
+        self.assertEqual(data["renderer"], "edgechromium")
+        self.assertEqual(data["version"], app.APP_VERSION)
+        self.view.start.assert_called_once_with(gui="edgechromium", debug=False)
+        self.assert_stopped(self.urls[0])
 
 
 if __name__ == "__main__":

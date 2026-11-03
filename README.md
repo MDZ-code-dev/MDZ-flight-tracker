@@ -25,9 +25,9 @@ and expand **Assets** on a completed release:
 
 | Platform | Download | Requirements |
 | --- | --- | --- |
-| Linux / Switchroot Fedora | [MDZ-SkyScan-linux.tar.gz](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases/latest/download/MDZ-SkyScan-linux.tar.gz) | Python 3.10+ and a browser; ARM64 and x86-64 supported |
-| Windows | [MDZ-SkyScan-windows.zip](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases/latest/download/MDZ-SkyScan-windows.zip) | Windows 10/11, x86-64; no separate Python installation |
-| Windows source alternative | [MDZ-SkyScan-windows-portable.zip](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases/latest/download/MDZ-SkyScan-windows-portable.zip) | Python 3.10+ installed separately |
+| Linux / Switchroot Fedora | [MDZ-SkyScan-linux.tar.gz](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases/latest/download/MDZ-SkyScan-linux.tar.gz) | Python 3.10+, GTK/WebKit2GTK and pywebview; ARM64 and x86-64 supported |
+| Windows | [MDZ-SkyScan-windows.zip](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases/latest/download/MDZ-SkyScan-windows.zip) | Windows 10/11, x86-64; Edge WebView2 Runtime; no separate Python installation |
+| Windows source alternative | [MDZ-SkyScan-windows-portable.zip](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases/latest/download/MDZ-SkyScan-windows-portable.zip) | Python 3.10+ and desktop-requirements.txt installed separately |
 | Android | [MDZ-SkyScan-android.apk](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases/latest/download/MDZ-SkyScan-android.apk) | Android 8.0+; universal ARM/x86 APK |
 
 The **Build downloads** workflow produces these files. A `v*` tag publishes them
@@ -41,21 +41,36 @@ GitHub's automatic “Source code” archives are not the packaged app.
 ## Linux / Switchroot Fedora
 
 1. Download and extract `MDZ-SkyScan-linux.tar.gz`.
-2. Install Python and a browser if needed. Fedora: `sudo dnf install python3 firefox`.
-3. Open a terminal in the extracted `MDZ-SkyScan` folder and run:
+2. Install the native window prerequisites. On Fedora / Switchroot Fedora:
 
    ```bash
+   sudo dnf install python3 python3-pip python3-gobject gtk3 webkit2gtk4.1
+   ```
+
+   On Debian / Ubuntu:
+
+   ```bash
+   sudo apt install python3-venv python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1
+   ```
+
+3. Open a terminal in the extracted `MDZ-SkyScan` folder and prepare its Python environment:
+
+   ```bash
+   python3 -m venv --system-site-packages .venv
+   .venv/bin/python -m pip install -r desktop-requirements.txt
    chmod +x MDZ-SkyScan.sh
    ./MDZ-SkyScan.sh
    ```
 
-Your browser opens the tracker. Keep the terminal open; press Ctrl+C to stop.
-No pip packages are required. This package works with ARM64 and x86-64 Python.
+SkyScan opens in its own desktop window using GTK/WebKit. Closing the window stops
+its private background server. The virtual environment must use the distro's
+Python so it can access the distro PyGObject bindings. ARM64 Switchroot does not
+need Qt or architecture-specific Python WebView wheels.
 
 ### Original Switchroot desktop launcher
 
-The original full-screen Fedora launcher and idle/sleep inhibitor remain available
-from a Git checkout:
+The Fedora desktop shortcut and idle/sleep inhibitor are available from a Git
+checkout. Install the Linux dependencies and `.venv` above, then:
 
 ```bash
 git clone https://github.com/MDZ-code-dev/MDZ-flight-tracker.git
@@ -64,24 +79,30 @@ bash install.sh
 ```
 
 Search the application launcher for **MDZ SkyScan**, or run `bash start.sh`.
-This uses `systemd-inhibit` to keep the Switch awake while the server runs. It
-tries Chromium, Chromium Browser, Chrome, Firefox, then the default browser.
+This uses `systemd-inhibit` to keep the Switch awake while its native app window
+is open. Closing the window stops the server and releases the sleep inhibitor.
 Use the portable launcher on systems without systemd or when sleep inhibition
-is unnecessary. Closing the browser alone does not stop `start.sh`'s server.
+is unnecessary.
 
 ## Windows
 
 1. Download `MDZ-SkyScan-windows.zip` and **Extract All**.
 2. Open its `MDZ-SkyScan` folder and run **MDZ-SkyScan.exe**. Keep the other files
    beside it; do not run from inside the ZIP.
-3. The tracker opens in your default browser. Keep the console open; closing it
-   stops the server.
+3. SkyScan opens as its own desktop application, without browser tabs or an address
+   bar. Closing the app window also stops its private background server.
+
+The app uses Microsoft's **Edge WebView2 Runtime** inside its window, not the Edge
+browser. It is normally present on Windows 10/11. If the app reports that it is
+missing, run the included `MicrosoftEdgeWebview2Setup.exe` installer, then reopen
+SkyScan. The installer downloads the runtime from Microsoft and needs Internet
+access. There is no automatic browser fallback.
 
 When updating, extract the new ZIP to a fresh folder and run its executable.
-Check the version in the app footer. The launcher checks the running build:
-if an older SkyScan is still using the default port, the new release opens on
-its own free local port instead of showing the old interface. Closing the old
-console releases its server. Saved location settings are shared across updates.
+Check the version in the app footer. Each app window owns a fresh private local
+server, so an older SkyScan cannot supply an outdated interface. You can close
+old console-based releases after upgrading. Saved location settings are shared
+across updates.
 
 The executable is unsigned, so Windows may show a publisher warning. Download
 from this repository's releases and check the supplied checksum.
@@ -89,7 +110,7 @@ from this repository's releases and check the supplied checksum.
 For the source alternative, install [Python 3.10+](https://www.python.org/downloads/windows/)
 with the Python launcher/PATH option enabled, extract
 `MDZ-SkyScan-windows-portable.zip`, and double-click **MDZ-SkyScan.cmd**.
-No pip installation is needed.
+Install the desktop dependencies first with `py -3 -m pip install -r desktop-requirements.txt`.
 
 ## Android APK
 
@@ -135,7 +156,7 @@ to `api.adsb.lol` over HTTPS to find nearby aircraft.
 
 Desktop overrides: `MDZ_TRACKER_CONFIG` selects a settings file;
 `MDZ_TRACKER_PORT` selects the HTTP port (default 8765). An explicitly selected
-port must be free or already running the same build. The desktop server binds
+port must be free; app windows never reuse another process. The desktop server binds
 only to `127.0.0.1`. Existing `start.sh` users keep their original settings;
 switching to a portable launcher uses a separate settings location.
 
@@ -146,11 +167,17 @@ switching to a portable launcher uses a separate settings location.
 ```bash
 git clone https://github.com/MDZ-code-dev/MDZ-flight-tracker.git
 cd MDZ-flight-tracker
-python3 desktop.py
+python3 -m venv --system-site-packages .venv
+.venv/bin/python -m pip install -r desktop-requirements.txt
+.venv/bin/python desktop.py
 ```
 
-On Windows use `py -3 desktop.py`. For server-only development use `python3 app.py`.
-Python 3.10+ is sufficient. Run the checks with:
+On Windows use `py -3 -m pip install -r desktop-requirements.txt` and
+`py -3 desktop.py`. The native GUI loop runs on the main thread and owns its
+backend's lifecycle. Linux also needs the GTK dependencies listed above.
+For explicit browser-based development only, use `python3 app.py` and open its
+printed local address yourself. This server-only option needs Python 3.10+ and
+no third-party packages; the app launcher never opens a browser. Run the checks with:
 
 ```bash
 python3 -m unittest discover -s tests -v
@@ -171,12 +198,13 @@ Linux and Windows source packages appear in `dist/`. To build the standalone
 Windows executable, run **on Windows**:
 
 ```powershell
-py -3 -m pip install pyinstaller==6.16.0
-py -3 -m PyInstaller --noconfirm --clean --onedir --name MDZ-SkyScan --add-data "web;web" desktop.py
+py -3 -m pip install pyinstaller==6.16.0 -r desktop-requirements.txt
+py -3 -m PyInstaller --noconfirm --clean --onedir --windowed --name MDZ-SkyScan --collect-all webview --collect-all pythonnet --collect-all clr_loader --add-data "web;web" desktop.py
 ```
 
-Distribute the entire `dist/MDZ-SkyScan` folder. GitHub Actions builds, starts,
-checks, and ZIPs this executable automatically.
+Distribute the entire `dist/MDZ-SkyScan` folder. GitHub Actions verifies the actual
+window and embedded WebView2, tests the silhouette/font, closes the window to
+check server cleanup, and ZIPs the app with the official runtime installer.
 
 ### Android APK
 
@@ -235,11 +263,15 @@ prove those platforms have been tested.
 ## Troubleshooting
 
 - **No planes:** check coordinates, radius, and Internet access to `api.adsb.lol`.
-- **Address already in use:** stop the existing tracker, or set another
-  `MDZ_TRACKER_PORT` when using `desktop.py` / `app.py`.
+- **Address already in use:** unset `MDZ_TRACKER_PORT` to let each desktop app
+  select its own free port. Only explicitly pinned ports can collide.
 - **Android “App not installed”:** check Android 8.0+, free space, and whether an
   installed version has a different signing key.
 - **Fedora launcher fails on another distro:** use `MDZ-SkyScan.sh` instead of the
   optional systemd desktop launcher.
-- **Update a source checkout:** run `git pull`, restart the server, and refresh
-  the browser. For packages, download and extract the new version.
+- **Update a source checkout:** run `git pull`, close and reopen the app.
+  For packages, download and extract the new version.
+
+Desktop startup errors are written to `desktop.log` beside the desktop settings
+file. Windows also shows a native error dialog; Linux prints setup guidance in
+the launching terminal.

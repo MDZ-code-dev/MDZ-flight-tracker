@@ -22,6 +22,17 @@ jobs:
         with:
           node-version: '22'
       - run: node tests/test_web.cjs
+      - name: Install Linux native window prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-venv python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1 xvfb xauth dbus-x11
+          /usr/bin/python3 -m venv --system-site-packages "$RUNNER_TEMP/mdz-gtk"
+          "$RUNNER_TEMP/mdz-gtk/bin/python" -m pip install -r desktop-requirements.txt
+      - name: Verify native Linux app window and shutdown
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          WEBKIT_DISABLE_DMABUF_RENDERER: '1'
+        run: dbus-run-session -- xvfb-run -a "$RUNNER_TEMP/mdz-gtk/bin/python" tests/smoke_linux_window.py
       - run: python scripts/package_desktop.py
       - uses: actions/upload-artifact@v4
         with:
@@ -39,9 +50,41 @@ jobs:
           node-version: '22'
       - run: python -m unittest discover -s tests -v
       - run: npm install --prefix "$env:RUNNER_TEMP/mdz-browser" --no-audit --no-fund playwright-core@1.56.1
-      - run: python -m pip install pyinstaller==6.16.0
-      - run: python -m PyInstaller --noconfirm --clean --onedir --name MDZ-SkyScan --add-data "web;web" desktop.py
-      - name: Verify upgraded executable, silhouette, and pixel font in Edge
+      - run: python -m pip install pyinstaller==6.16.0 -r desktop-requirements.txt
+      - run: python -m PyInstaller --noconfirm --clean --onedir --windowed --collect-all webview --collect-all pythonnet --collect-all clr_loader --name MDZ-SkyScan --add-data "web;web" desktop.py
+      - name: Include verified WebView2 installer and ensure native runtime
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP 'MicrosoftEdgeWebview2Setup.exe'
+          Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $installer
+          $signature = Get-AuthenticodeSignature $installer
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft Corporation') {
+            throw 'The WebView2 installer did not pass Microsoft Authenticode verification'
+          }
+          function Get-WebView2Version {
+            $keys = @(
+              'HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}',
+              'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}',
+              'HKCU:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+            )
+            foreach ($key in $keys) {
+              $runtimeVersion = (Get-ItemProperty $key -Name pv -ErrorAction SilentlyContinue).pv
+              if ($runtimeVersion -and $runtimeVersion -ne '0.0.0.0') { return $runtimeVersion }
+            }
+            return $null
+          }
+          if (-not (Get-WebView2Version)) {
+            $setup = Start-Process $installer -ArgumentList '/silent', '/install' -Wait -PassThru
+            if ($setup.ExitCode -ne 0) { throw "WebView2 runtime setup exited with $($setup.ExitCode)" }
+          }
+          if (-not (Get-WebView2Version)) { throw 'WebView2 Runtime is not installed' }
+          Copy-Item $installer dist/MDZ-SkyScan/
+          foreach ($required in @('Microsoft.Web.WebView2.Core.dll', 'Microsoft.Web.WebView2.WinForms.dll', 'WebView2Loader.dll', 'Python.Runtime.dll')) {
+            if (-not (Get-ChildItem dist/MDZ-SkyScan -Recurse -File -Filter $required)) {
+              throw "Native app bundle is missing $required"
+            }
+          }
+      - name: Verify native window, embedded silhouette/font, and close lifecycle
         shell: pwsh
         run: ./tests/smoke_windows.ps1
       - shell: pwsh
