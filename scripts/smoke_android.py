@@ -21,6 +21,7 @@ def screen():
 
 def tap(node):
     x1, y1, x2, y2 = map(int, re.findall(r"\d+", node.attrib["bounds"]))
+    assert x2 > x1 and y2 > y1, "Control is outside viewport: " + repr(node.attrib)
     adb("shell", "input", "tap", str((x1+x2)//2), str((y1+y2)//2))
 
 
@@ -45,7 +46,7 @@ def main():
             break
         time.sleep(1)
     else:
-        raise AssertionError("Android settings save did not complete")
+        raise AssertionError("Android settings save did not complete: " + texts)
     tap(next(n for n in tree.iter() if n.attrib.get("text") == "MODE: NEAREST"))
     tree = screen()
     assert any(n.attrib.get("text") == "MODE: RADAR" for n in tree.iter()), "Radar switch failed"
