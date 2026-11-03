@@ -3,39 +3,58 @@ set -e
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 URL="http://127.0.0.1:8765"
+LOG_DIR="$HOME/.local/state/mdz-skyscan"
+LOG_FILE="$LOG_DIR/server.log"
 
-# Keep Fedora awake for as long as this launcher is running.
-if [ "${MDZ_INHIBITED:-0}" != "1" ] && command -v systemd-inhibit >/dev/null 2>&1; then
-  exec systemd-inhibit \
-    --what=idle:sleep \
-    --mode=block \
-    --why="MDZ SkyScan is running" \
-    env MDZ_INHIBITED=1 "$0" "$@"
-fi
-
+mkdir -p "$LOG_DIR"
 cd "$ROOT"
-python3 app.py &
-SERVER_PID=$!
-cleanup(){ kill "$SERVER_PID" 2>/dev/null || true; }
-trap cleanup EXIT INT TERM
 
-# Give the local server a moment to start.
-for _ in $(seq 1 30); do
-  if python3 - <<'PY' >/dev/null 2>&1
+server_ready() {
+  python3 - <<'PY' >/dev/null 2>&1
 import urllib.request
-urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=.25).read()
+urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=.35).read()
 PY
-  then break; fi
-  sleep .2
-done
+}
 
-if command -v firefox >/dev/null 2>&1; then
-  firefox --new-instance --kiosk "$URL"
-elif command -v chromium >/dev/null 2>&1; then
-  chromium --start-fullscreen --app="$URL"
-elif command -v chromium-browser >/dev/null 2>&1; then
-  chromium-browser --start-fullscreen --app="$URL"
-else
-  xdg-open "$URL"
-  wait "$SERVER_PID"
+# Start the local tracker server only if it is not already running.
+# The server itself is wrapped in systemd-inhibit so Fedora stays awake
+# even if Chromium/Chrome hands the window off to an existing process.
+if ! server_ready; then
+  if command -v systemd-inhibit >/dev/null 2>&1; then
+    nohup systemd-inhibit \
+      --what=idle:sleep \
+      --mode=block \
+      --why="MDZ SkyScan is running" \
+      python3 "$ROOT/app.py" >"$LOG_FILE" 2>&1 &
+  else
+    nohup python3 "$ROOT/app.py" >"$LOG_FILE" 2>&1 &
+  fi
+
+  for _ in $(seq 1 40); do
+    if server_ready; then
+      break
+    fi
+    sleep .2
+  done
 fi
+
+if ! server_ready; then
+  echo "MDZ SkyScan server failed to start."
+  echo "Log: $LOG_FILE"
+  exit 1
+fi
+
+# Open in a browser. The server stays alive in the background.
+if command -v chromium >/dev/null 2>&1; then
+  chromium --start-fullscreen --app="$URL" >/dev/null 2>&1 &
+elif command -v chromium-browser >/dev/null 2>&1; then
+  chromium-browser --start-fullscreen --app="$URL" >/dev/null 2>&1 &
+elif command -v google-chrome >/dev/null 2>&1; then
+  google-chrome --start-fullscreen --app="$URL" >/dev/null 2>&1 &
+elif command -v firefox >/dev/null 2>&1; then
+  firefox --kiosk "$URL" >/dev/null 2>&1 &
+else
+  xdg-open "$URL" >/dev/null 2>&1 &
+fi
+
+exit 0
