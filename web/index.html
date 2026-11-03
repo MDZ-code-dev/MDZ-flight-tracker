@@ -79,7 +79,7 @@
   <div id="settingsModal" class="modal">
     <div class="modal-card">
       <h2>TRACKER LOCATION</h2>
-      <p>The Switch has no GPS. Use browser location if available or enter coordinates once.</p>
+      <p id="locationHelp">Use browser location if available or enter your latitude and longitude once.</p>
       <div class="form-grid">
         <label>LATITUDE<input id="lat" inputmode="decimal" placeholder="45.0000"></label>
         <label>LONGITUDE<input id="lon" inputmode="decimal" placeholder="-75.0000"></label>
@@ -95,6 +95,7 @@
     </div>
   </div>
 
+  <script src="native.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

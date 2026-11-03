@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import sys
 import threading
 import time
 import urllib.error
@@ -19,9 +20,9 @@ from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 WEB_DIR = ROOT / "web"
-CONFIG_FILE = ROOT / "config.json"
+CONFIG_FILE = Path(os.environ.get("MDZ_TRACKER_CONFIG", str(ROOT / "config.json")))
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("MDZ_TRACKER_PORT", "8765"))
 
@@ -66,6 +67,7 @@ def save_config(new_cfg: dict) -> dict:
     refresh = float(new_cfg.get("refresh_seconds", cfg.get("refresh_seconds", 5)))
     cfg["refresh_seconds"] = max(3, min(60, refresh))
 
+    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     CONFIG_FILE.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
     return cfg
 
