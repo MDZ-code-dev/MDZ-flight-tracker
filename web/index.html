@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
   <title>MDZ SkyScan</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=1.0.5">
 </head>
 <body>
   <div class="app">
     <header class="panel topbar">
       <div>
-        <div class="logo">✈ MDZ SKYSCAN</div>
-        <div class="subtitle">LIVE AIRCRAFT TRACKER // SWITCH EDITION</div>
+        <div class="logo"><svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 2h2v7l8 5v2l-8-3v6l3 2v1l-4-1-4 1v-1l3-2v-6l-8 3v-2l8-5z"/></svg>MDZ SKYSCAN</div>
+        <div class="subtitle">LIVE AIRCRAFT RADAR</div>
       </div>
       <div class="actions">
         <span id="status" class="status loading">CONNECT</span>
@@ -51,6 +51,7 @@
             <div class="box"><small>IN RANGE</small><strong id="count">0</strong></div>
           </div>
           <figure id="aircraftVisual" class="aircraft-visual is-empty" role="img" aria-label="Waiting for tracked aircraft">
+            <span class="aircraft-visual-title">TRACKED AIRCRAFT</span>
             <svg class="aircraft-visual-svg" viewBox="0 0 240 240" aria-hidden="true" focusable="false">
               <g class="aircraft-guide" fill="none">
                 <path d="M20 42V20H42 M198 20H220V42 M220 198V220H198 M42 220H20V198" />
@@ -86,6 +87,7 @@
       <span id="updated">LAST UPDATE: --:--:--</span>
       <span>DATA: ADSB.LOL • ODbL</span>
       <span id="rangeFooter">RANGE: 80 NM</span>
+      <span id="appVersion">v1.0.5</span>
     </footer>
   </div>
 
@@ -108,8 +110,8 @@
     </div>
   </div>
 
-  <script src="native.js"></script>
-  <script src="silhouettes.js"></script>
-  <script src="app.js"></script>
+  <script src="native.js?v=1.0.5"></script>
+  <script src="silhouettes.js?v=1.0.5"></script>
+  <script src="app.js?v=1.0.5"></script>
 </body>
 </html>

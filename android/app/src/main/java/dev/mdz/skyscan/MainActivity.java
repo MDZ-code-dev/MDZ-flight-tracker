@@ -52,8 +52,9 @@ public class MainActivity extends Activity {
                     if (path != null && path.matches("/[a-zA-Z0-9_.-]+") && !path.contains("..")) {
                         try {
                             String mime = path.endsWith(".js") ? "application/javascript" :
-                                path.endsWith(".css") ? "text/css" : "text/html";
-                            return new WebResourceResponse(mime, "UTF-8", getAssets().open("web" + path));
+                                path.endsWith(".css") ? "text/css" :
+                                path.endsWith(".ttf") ? "font/ttf" : "text/html";
+                            return new WebResourceResponse(mime, path.endsWith(".ttf") ? null : "UTF-8", getAssets().open("web" + path));
                         } catch (Exception ignored) { }
                     }
                 }

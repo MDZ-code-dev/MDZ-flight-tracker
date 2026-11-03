@@ -8,8 +8,10 @@ Live aircraft data: https://api.adsb.lol (ODbL)
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import os
+import socket
 import sys
 import threading
 import time
@@ -25,6 +27,42 @@ WEB_DIR = ROOT / "web"
 CONFIG_FILE = Path(os.environ.get("MDZ_TRACKER_CONFIG", str(ROOT / "config.json")))
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("MDZ_TRACKER_PORT", "8765"))
+APP_VERSION = "1.0.5"
+
+
+def frontend_build_id() -> str:
+    """Identify the actual bundled UI, including changes within a version."""
+    digest = hashlib.sha256(APP_VERSION.encode("utf-8"))
+    for asset in sorted(WEB_DIR.rglob("*")):
+        if asset.is_file():
+            data = asset.read_bytes()
+            digest.update(asset.relative_to(WEB_DIR).as_posix().encode("utf-8"))
+            digest.update(b"\0")
+            digest.update(str(len(data)).encode("ascii"))
+            digest.update(b"\0")
+            digest.update(data)
+    return digest.hexdigest()
+
+
+BUILD_ID = frontend_build_id()
+
+
+def health_payload() -> dict:
+    return {"ok": True, "app": "mdz-skyscan", "version": APP_VERSION, "build": BUILD_ID}
+
+
+class TrackerHTTPServer(ThreadingHTTPServer):
+    # SO_REUSEADDR can allow a second Windows server to bind an existing port.
+    # Exclusivity makes an upgrade collision explicit instead of routing users
+    # unpredictably between old and new releases.
+    allow_reuse_address = sys.platform != "win32"
+
+    def server_bind(self):
+        if sys.platform == "win32":
+            self.allow_reuse_address = False
+            if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
 DEFAULT_CONFIG = {
     "lat": None,
@@ -224,12 +262,24 @@ class Handler(SimpleHTTPRequestHandler):
         # Keep terminal output clean unless there is a problem.
         return
 
+    def end_headers(self):
+        # Every release uses the same local URLs. Never retain stale UI assets.
+        self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+
+    def send_head(self):
+        # Bundled files may retain timestamps across package upgrades. Serving
+        # their contents avoids a stale browser receiving a misleading 304.
+        for header in ("If-Modified-Since", "If-None-Match"):
+            if header in self.headers:
+                del self.headers[header]
+        return super().send_head()
+
     def send_json(self, data, status=HTTPStatus.OK):
         raw = json.dumps(data).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(raw)))
-        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(raw)
 
@@ -251,7 +301,7 @@ class Handler(SimpleHTTPRequestHandler):
                 }, HTTPStatus.BAD_GATEWAY)
             return
         if path == "/health":
-            self.send_json({"ok": True})
+            self.send_json(health_payload())
             return
         super().do_GET()
 
@@ -271,9 +321,10 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
 
 
-def main():
-    server = ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f"MDZ Plane Tracker running at http://{HOST}:{PORT}")
+def main(server=None):
+    server = server if server is not None else TrackerHTTPServer((HOST, PORT), Handler)
+    host, port = server.server_address[:2]
+    print(f"MDZ Plane Tracker {APP_VERSION} running at http://{host}:{port}", flush=True)
     print("Press Ctrl+C to stop.")
     try:
         server.serve_forever()

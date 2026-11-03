@@ -14,6 +14,10 @@ recognized and turns with the reported heading. Other models use a generic
 silhouette; these are family outlines, not exact model drawings. No aircraft in
 range clears the silhouette.
 
+The interface uses the bundled **Silkscreen** pixel font, so the same typography
+works offline on Windows, Linux, and Android. Its SIL Open Font License and
+copyright notice are included in `web/OFL-Silkscreen.txt`.
+
 ## Downloads
 
 Open **[Releases](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases)**
@@ -73,6 +77,12 @@ is unnecessary. Closing the browser alone does not stop `start.sh`'s server.
 3. The tracker opens in your default browser. Keep the console open; closing it
    stops the server.
 
+When updating, extract the new ZIP to a fresh folder and run its executable.
+Check the version in the app footer. The launcher checks the running build:
+if an older SkyScan is still using the default port, the new release opens on
+its own free local port instead of showing the old interface. Closing the old
+console releases its server. Saved location settings are shared across updates.
+
 The executable is unsigned, so Windows may show a publisher warning. Download
 from this repository's releases and check the supplied checksum.
 
@@ -124,7 +134,8 @@ to `api.adsb.lol` over HTTPS to find nearby aircraft.
 | Android | Private app preferences; cleared when uninstalling |
 
 Desktop overrides: `MDZ_TRACKER_CONFIG` selects a settings file;
-`MDZ_TRACKER_PORT` selects the HTTP port (default 8765). The desktop server binds
+`MDZ_TRACKER_PORT` selects the HTTP port (default 8765). An explicitly selected
+port must be free or already running the same build. The desktop server binds
 only to `127.0.0.1`. Existing `start.sh` users keep their original settings;
 switching to a portable launcher uses a separate settings location.
 

@@ -41,11 +41,31 @@ class TrackerTests(unittest.TestCase):
             return json.load(response)
 
     def test_bundled_ui_and_health(self):
-        self.assertEqual(self.get("/health"), {"ok": True})
+        self.assertEqual(self.get("/health"), app.health_payload())
         for path, marker in [("/", b"MDZ SKYSCAN"), ("/native.js", b"mdzFetch"),
                              ("/silhouettes.js", b"aircraftProfile"), ("/app.js", b"aircraftLabel")]:
             with urllib.request.urlopen(self.url + path) as response:
                 self.assertIn(marker, response.read())
+
+    def test_static_assets_are_fresh_even_with_old_cache_conditions(self):
+        request = urllib.request.Request(self.url + "/app.js", headers={
+            "If-Modified-Since": "Fri, 01 Jan 2100 00:00:00 GMT",
+            "If-None-Match": '"old-release"',
+        })
+        with urllib.request.urlopen(request) as response:
+            self.assertEqual(response.status, 200)
+            self.assertEqual(response.headers["Cache-Control"], "no-store")
+            self.assertIn(b"aircraftLabel", response.read())
+
+    def test_frontend_identity_changes_when_asset_contents_change(self):
+        web = Path(self.tmp.name) / "web"
+        web.mkdir()
+        asset = web / "app.js"
+        asset.write_text("old frontend", encoding="utf-8")
+        with patch.object(app, "WEB_DIR", web):
+            before = app.frontend_build_id()
+            asset.write_text("new frontend", encoding="utf-8")
+            self.assertNotEqual(app.frontend_build_id(), before)
 
     def test_location_required(self):
         self.assertIsNone(self.get("/api/config")["lat"])
