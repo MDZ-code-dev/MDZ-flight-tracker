@@ -1,3 +1,7 @@
 # Native desktop window. Windows wheels include the WebView2 interop libraries.
 # Linux also needs distro PyGObject + GTK3 + WebKit2GTK 4.1 (see README).
 pywebview==6.2.1
+
+# Pin the exact Windows bridge versions exercised by the release tests.
+pythonnet==3.2.1; sys_platform == "win32"
+clr_loader==0.3.1; sys_platform == "win32"

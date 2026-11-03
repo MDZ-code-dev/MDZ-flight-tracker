@@ -3,14 +3,20 @@
 import ctypes
 import importlib
 import json
-import logging
 import os
+import platform
 import sys
 import threading
+import traceback
+from datetime import datetime, timezone
 from pathlib import Path
 
 
 WINDOW_TITLE = "MDZ SkyScan"
+
+
+def bundle_directory():
+    return Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
 
 
 def require_windows_runtime():
@@ -85,7 +91,8 @@ def write_runtime_info(app, url, renderer):
         destination = Path(target)
         destination.parent.mkdir(parents=True, exist_ok=True)
         data = dict(app.health_payload(), pid=os.getpid(), url=url,
-                    renderer=renderer, window_title=WINDOW_TITLE)
+                    renderer=renderer, window_title=WINDOW_TITLE,
+                    bundle_dir=str(bundle_directory()), frozen=bool(getattr(sys, "frozen", False)))
         temporary = destination.with_name(destination.name + ".tmp")
         temporary.write_text(json.dumps(data), encoding="utf-8")
         temporary.replace(destination)
@@ -127,6 +134,21 @@ def main():
         thread.join(timeout=3)
 
 
+def startup_message(error, log_file):
+    details = str(error)
+    if "Python.Runtime" in details or "pythonnet" in details.lower():
+        help_text = ("A bundled .NET library could not be loaded. Use the latest "
+                     "standalone SkyScan Windows executable from the project's releases. "
+                     "If it still fails, share the startup log below.")
+    elif sys.platform == "win32":
+        # Specific runtime checks already name the installer that is needed.
+        help_text = "See the startup log below for details."
+    else:
+        help_text = "See the GTK/WebKit2GTK setup instructions in README.md."
+    return (f"SkyScan could not open its app window.\n\n{details}\n\n"
+            f"{help_text}\n\nStartup log: {log_file}")
+
+
 def report_error(error):
     target = os.environ.get("MDZ_DESKTOP_STATE_FILE")
     if target:
@@ -134,22 +156,24 @@ def report_error(error):
             destination = Path(target)
             destination.parent.mkdir(parents=True, exist_ok=True)
             previous = json.loads(destination.read_text()) if destination.exists() else {}
-            previous.update(error=str(error), pid=os.getpid())
+            if not isinstance(previous, dict):
+                previous = {}
+            previous.update(error=str(error), pid=os.getpid(), bundle_dir=str(bundle_directory()))
             destination.write_text(json.dumps(previous), encoding="utf-8")
         except (OSError, ValueError):
             pass
-    message = (f"SkyScan could not open its app window.\n\n{error}\n\n"
-               "Windows: install the Microsoft Edge WebView2 Runtime using the "
-               "installer included in the download.\n"
-               "Linux: follow the GTK/WebKit2GTK setup in README.md.")
     config = Path(os.environ.get("MDZ_TRACKER_CONFIG", Path.home() / ".config/mdz-skyscan/config.json"))
+    log_file = config.parent / "desktop.log"
     try:
         config.parent.mkdir(parents=True, exist_ok=True)
-        logging.basicConfig(filename=config.parent / "desktop.log", level=logging.ERROR,
-                            format="%(asctime)s %(levelname)s %(message)s")
-        logging.exception("Desktop startup failed")
+        with log_file.open("a", encoding="utf-8") as stream:
+            stream.write(f"\n{datetime.now(timezone.utc).isoformat()} Desktop startup failed\n")
+            stream.write(f"Platform: {platform.platform()}\nPython: {sys.version}\n")
+            stream.write(f"Bundle: {bundle_directory()}\n")
+            traceback.print_exception(type(error), error, error.__traceback__, file=stream)
     except OSError:
         pass
+    message = startup_message(error, log_file)
     if sys.platform == "win32":
         ctypes.windll.user32.MessageBoxW(None, message, WINDOW_TITLE, 0x10)
     elif sys.stderr:

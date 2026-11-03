@@ -51,7 +51,12 @@ jobs:
       - run: python -m unittest discover -s tests -v
       - run: npm install --prefix "$env:RUNNER_TEMP/mdz-browser" --no-audit --no-fund playwright-core@1.56.1
       - run: python -m pip install pyinstaller==6.16.0 -r desktop-requirements.txt
-      - run: python -m PyInstaller --noconfirm --clean --onedir --windowed --collect-all webview --collect-all pythonnet --collect-all clr_loader --name MDZ-SkyScan --add-data "web;web" desktop.py
+      - name: Build self-contained native Windows executable
+        run: |
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --collect-all webview --collect-all pythonnet --collect-all clr_loader --name MDZ-SkyScan --add-data "web;web" desktop.py
+          New-Item -ItemType Directory -Path dist/MDZ-SkyScan | Out-Null
+          Copy-Item dist/MDZ-SkyScan.exe dist/MDZ-SkyScan/MDZ-SkyScan.exe
+          Copy-Item dist/MDZ-SkyScan.exe dist/MDZ-SkyScan-windows.exe
       - name: Include verified WebView2 installer and ensure native runtime
         shell: pwsh
         run: |
@@ -79,12 +84,7 @@ jobs:
           }
           if (-not (Get-WebView2Version)) { throw 'WebView2 Runtime is not installed' }
           Copy-Item $installer dist/MDZ-SkyScan/
-          foreach ($required in @('Microsoft.Web.WebView2.Core.dll', 'Microsoft.Web.WebView2.WinForms.dll', 'WebView2Loader.dll', 'Python.Runtime.dll')) {
-            if (-not (Get-ChildItem dist/MDZ-SkyScan -Recurse -File -Filter $required)) {
-              throw "Native app bundle is missing $required"
-            }
-          }
-      - name: Verify native window, embedded silhouette/font, and close lifecycle
+      - name: Reproduce blocked old DLL and verify downloaded native app
         shell: pwsh
         run: ./tests/smoke_windows.ps1
       - shell: pwsh
@@ -94,7 +94,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: dist/MDZ-SkyScan-windows.zip
+          path: |
+            dist/MDZ-SkyScan-windows.zip
+            dist/MDZ-SkyScan-windows.exe
   android:
     runs-on: ubuntu-24.04
     steps:
@@ -161,5 +163,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cd downloads
-          sha256sum *.zip *.tar.gz *.apk > SHA256SUMS.txt
+          sha256sum *.zip *.tar.gz *.apk *.exe > SHA256SUMS.txt
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes ./*

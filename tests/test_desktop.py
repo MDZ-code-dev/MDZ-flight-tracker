@@ -144,6 +144,27 @@ class NativeLauncherTests(unittest.TestCase):
         self.assertEqual(self.view.settings["REMOTE_DEBUGGING_PORT"], 12345)
         self.assertFalse(self.view.settings["OPEN_DEVTOOLS_IN_DEBUG"])
 
+    def test_clr_bridge_error_does_not_recommend_webview_installer(self):
+        error = RuntimeError("Failed to resolve Python.Runtime.Loader.Initialize from Python.Runtime.dll")
+        message = desktop.startup_message(error, Path(self.tmp.name) / "desktop.log")
+        self.assertIn("bundled .NET library", message)
+        self.assertIn("standalone", message)
+        self.assertIn("desktop.log", message)
+        self.assertNotIn("WebView2", message)
+
+    def test_report_preserves_traceback_and_writes_diagnostic_state(self):
+        state = Path(self.tmp.name) / "state.json"
+        os.environ["MDZ_DESKTOP_STATE_FILE"] = str(state)
+        try:
+            raise RuntimeError("Python.Runtime test failure")
+        except RuntimeError as error:
+            with patch.object(desktop.sys, "platform", "linux"), patch.object(desktop.sys, "stderr"):
+                desktop.report_error(error)
+        text = (Path(self.tmp.name) / "desktop.log").read_text()
+        self.assertIn("RuntimeError: Python.Runtime test failure", text)
+        self.assertIn("Traceback", text)
+        self.assertEqual(json.loads(state.read_text())["error"], "Python.Runtime test failure")
+
 
 if __name__ == "__main__":
     unittest.main()

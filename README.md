@@ -26,8 +26,9 @@ and expand **Assets** on a completed release:
 | Platform | Download | Requirements |
 | --- | --- | --- |
 | Linux / Switchroot Fedora | [MDZ-SkyScan-linux.tar.gz](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases/latest/download/MDZ-SkyScan-linux.tar.gz) | Python 3.10+, GTK/WebKit2GTK and pywebview; ARM64 and x86-64 supported |
-| Windows | [MDZ-SkyScan-windows.zip](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases/latest/download/MDZ-SkyScan-windows.zip) | Windows 10/11, x86-64; Edge WebView2 Runtime; no separate Python installation |
-| Windows source alternative | [MDZ-SkyScan-windows-portable.zip](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases/latest/download/MDZ-SkyScan-windows-portable.zip) | Python 3.10+ and desktop-requirements.txt installed separately |
+| Windows app | [MDZ-SkyScan-windows.exe](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases/latest/download/MDZ-SkyScan-windows.exe) | Windows 10/11, x86-64; Edge WebView2 Runtime |
+| Windows ZIP (app + runtime installer) | [MDZ-SkyScan-windows.zip](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases/latest/download/MDZ-SkyScan-windows.zip) | Windows 10/11, x86-64; Edge WebView2 Runtime; no separate Python installation |
+| Windows source alternative | [MDZ-SkyScan-windows-portable.zip](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases/latest/download/MDZ-SkyScan-windows-portable.zip) | Python 3.11+ and desktop-requirements.txt installed separately |
 | Android | [MDZ-SkyScan-android.apk](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases/latest/download/MDZ-SkyScan-android.apk) | Android 8.0+; universal ARM/x86 APK |
 
 The **Build downloads** workflow produces these files. A `v*` tag publishes them
@@ -86,9 +87,11 @@ is unnecessary.
 
 ## Windows
 
-1. Download `MDZ-SkyScan-windows.zip` and **Extract All**.
-2. Open its `MDZ-SkyScan` folder and run **MDZ-SkyScan.exe**. Keep the other files
-   beside it; do not run from inside the ZIP.
+1. Download **MDZ-SkyScan-windows.exe** and run it directly. No Python installation
+   or `_internal` folder is needed.
+2. Alternatively, download `MDZ-SkyScan-windows.zip`, **Extract All**, and run
+   **MDZ-SkyScan.exe** inside its `MDZ-SkyScan` folder. The ZIP also includes the
+   optional Microsoft runtime installer.
 3. SkyScan opens as its own desktop application, without browser tabs or an address
    bar. Closing the app window also stops its private background server.
 
@@ -98,7 +101,11 @@ missing, run the included `MicrosoftEdgeWebview2Setup.exe` installer, then reope
 SkyScan. The installer downloads the runtime from Microsoft and needs Internet
 access. There is no automatic browser fallback.
 
-When updating, extract the new ZIP to a fresh folder and run its executable.
+The standalone executable unpacks its bundled libraries into a private temporary
+folder when it runs. First launch can take a few seconds. This also avoids loading
+.NET DLLs directly from an Internet-marked extracted download folder. Windows continues to check the downloaded executable normally.
+
+When updating, run the new executable or extract the new ZIP to a fresh folder.
 Check the version in the app footer. Each app window owns a fresh private local
 server, so an older SkyScan cannot supply an outdated interface. You can close
 old console-based releases after upgrading. Saved location settings are shared
@@ -107,7 +114,7 @@ across updates.
 The executable is unsigned, so Windows may show a publisher warning. Download
 from this repository's releases and check the supplied checksum.
 
-For the source alternative, install [Python 3.10+](https://www.python.org/downloads/windows/)
+For the source alternative, install [Python 3.11+](https://www.python.org/downloads/windows/)
 with the Python launcher/PATH option enabled, extract
 `MDZ-SkyScan-windows-portable.zip`, and double-click **MDZ-SkyScan.cmd**.
 Install the desktop dependencies first with `py -3 -m pip install -r desktop-requirements.txt`.
@@ -172,7 +179,7 @@ python3 -m venv --system-site-packages .venv
 .venv/bin/python desktop.py
 ```
 
-On Windows use `py -3 -m pip install -r desktop-requirements.txt` and
+On Windows use Python 3.11+ with `py -3 -m pip install -r desktop-requirements.txt` and
 `py -3 desktop.py`. The native GUI loop runs on the main thread and owns its
 backend's lifecycle. Linux also needs the GTK dependencies listed above.
 For explicit browser-based development only, use `python3 app.py` and open its
@@ -199,12 +206,14 @@ Windows executable, run **on Windows**:
 
 ```powershell
 py -3 -m pip install pyinstaller==6.16.0 -r desktop-requirements.txt
-py -3 -m PyInstaller --noconfirm --clean --onedir --windowed --name MDZ-SkyScan --collect-all webview --collect-all pythonnet --collect-all clr_loader --add-data "web;web" desktop.py
+py -3 -m PyInstaller --noconfirm --clean --onefile --windowed --name MDZ-SkyScan --collect-all webview --collect-all pythonnet --collect-all clr_loader --add-data "web;web" desktop.py
 ```
 
-Distribute the entire `dist/MDZ-SkyScan` folder. GitHub Actions verifies the actual
-window and embedded WebView2, tests the silhouette/font, closes the window to
-check server cleanup, and ZIPs the app with the official runtime installer.
+The app is `dist/MDZ-SkyScan.exe`. GitHub Actions tests a downloaded-file scenario:
+Internet-marked DLLs reproduce the older loader failure, then the new Internet-marked
+standalone executable must open its real app window, render the silhouette and pixel
+font, and shut down cleanly. The ZIP contains this same app and the official
+runtime installer; a direct executable download is also published.
 
 ### Android APK
 
@@ -265,6 +274,10 @@ prove those platforms have been tested.
 - **No planes:** check coordinates, radius, and Internet access to `api.adsb.lol`.
 - **Address already in use:** unset `MDZ_TRACKER_PORT` to let each desktop app
   select its own free port. Only explicitly pinned ports can collide.
+- **“Failed to resolve Python.Runtime.Loader.Initialize”:** replace older folder-based
+  Windows builds with the latest standalone executable. This is a bundled .NET
+  library load failure. If the current executable still fails, share `desktop.log`
+  from `%LOCALAPPDATA%\mdz-skyscan`; the error dialog shows the exact log path.
 - **Android “App not installed”:** check Android 8.0+, free space, and whether an
   installed version has a different signing key.
 - **Fedora launcher fails on another distro:** use `MDZ-SkyScan.sh` instead of the
