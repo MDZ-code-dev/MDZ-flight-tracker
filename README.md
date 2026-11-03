@@ -15,10 +15,10 @@ and expand **Assets** on a completed release:
 
 | Platform | Download | Requirements |
 | --- | --- | --- |
-| Linux / Switchroot Fedora | `MDZ-SkyScan-linux.tar.gz` | Python 3.10+ and a browser; ARM64 and x86-64 supported |
-| Windows | `MDZ-SkyScan-windows.zip` | Windows 10/11, x86-64; no separate Python installation |
-| Windows source alternative | `MDZ-SkyScan-windows-portable.zip` | Python 3.10+ installed separately |
-| Android | `MDZ-SkyScan-android.apk` | Android 8.0+; universal ARM/x86 APK |
+| Linux / Switchroot Fedora | [MDZ-SkyScan-linux.tar.gz](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases/latest/download/MDZ-SkyScan-linux.tar.gz) | Python 3.10+ and a browser; ARM64 and x86-64 supported |
+| Windows | [MDZ-SkyScan-windows.zip](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases/latest/download/MDZ-SkyScan-windows.zip) | Windows 10/11, x86-64; no separate Python installation |
+| Windows source alternative | [MDZ-SkyScan-windows-portable.zip](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases/latest/download/MDZ-SkyScan-windows-portable.zip) | Python 3.10+ installed separately |
+| Android | [MDZ-SkyScan-android.apk](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases/latest/download/MDZ-SkyScan-android.apk) | Android 8.0+; universal ARM/x86 APK |
 
 The **Build downloads** workflow produces these files. A `v*` tag publishes them
 only after every build and smoke-test job passes. If no release has completed,
@@ -205,8 +205,8 @@ settings, and radar switching. GitHub Actions runs it on an emulator.
 Push to `main` for CI artifacts. For a release, create a new version tag:
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.0.3
+git push origin v1.0.3
 ```
 
 When all three platform jobs pass, the workflow publishes a GitHub Release with
