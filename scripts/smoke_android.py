@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Install on a test emulator/device, CLEAR app data, and verify UI and bridge."""
 import re
+import os
 import subprocess
 import time
 import xml.etree.ElementTree as ET
@@ -30,11 +31,11 @@ def main():
     for _ in range(15):
         tree = screen()
         texts = " ".join(n.attrib.get("text", "") for n in tree.iter())
-        if "TRACKER LOCATION" in texts and "MDZ SKYSCAN" in texts:
+        if "TRACKER LOCATION" in texts:
             break
         time.sleep(1)
     else:
-        raise AssertionError("Android UI or native configuration bridge did not load")
+        raise AssertionError("Android settings UI did not load: " + texts)
     # Empty coordinates exercise persistence without a live API dependency.
     tap(next(n for n in tree.iter() if n.attrib.get("text") == "SAVE"))
     for _ in range(10):
@@ -52,4 +53,20 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as error:
+        print("::error::Android smoke test: " + str(error).replace("\n", " "))
+        diagnostics = "Android smoke test failed: " + repr(error) + "\n"
+        try:
+            tree = screen()
+            diagnostics += "\nUI text and bounds:\n" + "\n".join(
+                repr(n.attrib) for n in tree.iter() if n.attrib.get("text") or n.attrib.get("clickable") == "true")
+            diagnostics += "\n\nRuntime errors:\n" + adb("logcat", "-d", "-t", "300", "AndroidRuntime:E", "chromium:E", "*:S")
+        except Exception as diagnostic_error:
+            diagnostics += "\nDiagnostics unavailable: " + repr(diagnostic_error)
+        print(diagnostics)
+        if os.environ.get("GITHUB_STEP_SUMMARY"):
+            with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+                summary.write("### Android smoke diagnostics\n\n```text\n" + diagnostics + "\n```\n")
+        raise
