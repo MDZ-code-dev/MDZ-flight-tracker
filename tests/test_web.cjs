@@ -70,8 +70,70 @@ vm.runInContext(source.slice(0, source.indexOf("$('modeBtn').addEventListener"))
   assert.notEqual(elements.aircraftSilhouette.attributes.d, helicopterPath);
   assert.ok(!elements.aircraftVisualProfile.textContent.includes('HEADING UNKNOWN'));
   assert.ok(elements.aircraftVisual.attributes['aria-label'].includes('heading 0 degrees'));
+  const pathFor=type=>vm.runInContext(`aircraftProfile({type:${JSON.stringify(type)}}).path`,context);
+  for(const type of ['B731','B732','B733','B734','B735','B736','B737','B738','B739','B37M','B38M','B39M','B3XM']){
+    context.plane={...base,type,description:'Bombardier Challenger 350',category:'A7'};
+    vm.runInContext('renderNearest(plane,1)',context);
+    assert.equal(elements.aircraftSilhouette.attributes.d,pathFor('B738'));
+    assert.notEqual(elements.aircraftSilhouette.attributes.d,pathFor('CL35'));
+    assert.ok(elements.typeLine.textContent.includes('Boeing 737'));
+    assert.ok(!elements.typeLine.textContent.includes('Bombardier'));
+    assert.equal(elements.description.textContent,type);
+  }
+  context.plane={...base,type:'CL35',description:'Boeing 737-800'};
+  vm.runInContext('renderNearest(plane,1)',context);
+  assert.equal(elements.aircraftSilhouette.attributes.d,pathFor('CL35'));
+  assert.ok(elements.typeLine.textContent.includes('Challenger 350'));
+  assert.ok(!elements.typeLine.textContent.includes('Boeing'));
+  context.plane={...base,type:'UNMAPPED',callsign:'ROU1857',description:'---'};
+  vm.runInContext('renderNearest(plane,1)',context);
+  assert.equal(elements.aircraftSilhouette.attributes.d,pathFor('UNMAPPED'));
+  assert.ok(!elements.typeLine.textContent.includes('Boeing'));
   vm.runInContext('renderNearest(null,0)', context);
   assert.equal(elements.aircraftSilhouette.attributes.d, '');
   assert.equal(elements.aircraftSilhouette.attributes.transform, undefined);
-  console.log('PASS: HTTP/Android routing, aircraft rendering, silhouette changes, heading, unknown model and cleared contact');
+  // Out-of-order replies must never replace a newer aircraft with an older one.
+  context.renderList=()=>{}; context.drawRadar=()=>{};
+  const pending=[];
+  context.mdzFetch=()=>new Promise(resolve=>pending.push(resolve));
+  vm.runInContext('state.config={lat:43.65,lon:-79.38};',context);
+  const oldRequest=vm.runInContext('refresh()',context),newRequest=vm.runInContext('refresh()',context);
+  const newer={...base,type:'B738',hex:'new737',callsign:'BOEING'};
+  const older={...base,type:'CL35',hex:'old350',callsign:'CHALLENGER'};
+  pending[1]({json:async()=>({ok:true,nearest:newer,planes:[newer],total:1})});
+  await newRequest;
+  pending[0]({json:async()=>({ok:true,nearest:older,planes:[older],total:1})});
+  await oldRequest;
+  assert.equal(elements.callsign.textContent,'BOEING');
+  assert.equal(elements.hex.textContent,'NEW737');
+  assert.equal(elements.aircraftVisualType.textContent,'B738');
+  assert.equal(elements.aircraftSilhouette.attributes.d,pathFor('B738'));
+  context.mdzFetch=async()=>{throw new Error('Feed unavailable');};
+  await vm.runInContext('refresh()',context);
+  assert.equal(elements.aircraftVisualTitle.textContent,'LAST KNOWN AIRCRAFT');
+  assert.ok(elements.aircraftVisual.classes.has('is-stale'));
+  context.mdzFetch=async()=>({json:async()=>({ok:true,nearest:newer,planes:[newer],total:1})});
+  await vm.runInContext('refresh()',context);
+  assert.equal(elements.aircraftVisualTitle.textContent,'TRACKED AIRCRAFT');
+  assert.ok(!elements.aircraftVisual.classes.has('is-stale'));
+  // A location change also invalidates a reply from the previous location,
+  // even when clearing coordinates prevents a new aircraft request.
+  let oldLocationResponse;
+  context.mdzFetch=path=>path==='/api/config' ? Promise.resolve({json:async()=>({ok:true,config:{lat:null,lon:null}})}) :
+    new Promise(resolve=>{oldLocationResponse=resolve;});
+  const oldLocation=vm.runInContext('refresh()',context);
+  context.closeSettings=()=>{}; context.resetTimer=()=>{};
+  await vm.runInContext('saveSettings()',context);
+  oldLocationResponse({json:async()=>({ok:true,nearest:older,planes:[older],total:1,config:{lat:1,lon:1}})});
+  await oldLocation;
+  assert.equal(elements.aircraftSilhouette.attributes.d,'');
+  assert.equal(vm.runInContext('state.config.lat',context),null);
+  vm.runInContext('state.config={lat:43.65,lon:-79.38}',context);
+  let settingsOpened=false;context.openSettings=()=>{settingsOpened=true;};
+  context.mdzFetch=async()=>({json:async()=>({ok:false,needs_location:true,config:{lat:null,lon:null}})});
+  await vm.runInContext('refresh()',context);
+  assert.ok(settingsOpened);
+  assert.equal(elements.aircraftSilhouette.attributes.d,'');
+  assert.equal(vm.runInContext('state.config.lat',context),null);
+  console.log('PASS: routing, distinct aircraft/model names, heading, identity consistency, stale replies and location changes');
 })().catch(error => {console.error(error); process.exitCode = 1;});

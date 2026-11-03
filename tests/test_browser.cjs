@@ -45,7 +45,7 @@ async function main() {
       await page.evaluate(() => document.fonts.ready);
       assert(await page.evaluate(() => Array.from(document.fonts).some(font =>
         font.family.replace(/["']/g,'') === 'SkyScan Pixel' && font.status === 'loaded')), 'Bundled pixel font did not load');
-      assert.equal(await page.locator('#appVersion').textContent(), 'v1.0.8');
+      assert.equal(await page.locator('#appVersion').textContent(), 'v1.0.9');
       if (width <= 850) await page.locator('#aircraftVisual').scrollIntoViewIfNeeded();
       for (const heading of [0,45,90,180,238,315]) {
         await page.evaluate(p => renderNearest(p,1), {...plane,track:heading});
@@ -60,6 +60,27 @@ async function main() {
         fs.mkdirSync(process.env.MDZ_SCREENSHOT_DIR,{recursive:true});
         await page.screenshot({path:path.join(process.env.MDZ_SCREENSHOT_DIR,name+'.png'),fullPage:true});
       }
+      // Exact reported types keep their own models even when feed text conflicts.
+      const typeCases = [
+        ['B738','Bombardier Challenger 350','Boeing 737-800',true],
+        ['CL35','Boeing 737-800','Bombardier Challenger 350/3500',true],
+        ['CRJ9','Bombardier CRJ900','Bombardier CRJ900',false],
+        ['B722','Boeing 727-200','Boeing 727-200',false],
+        ['MD11','McDonnell Douglas MD-11','McDonnell Douglas MD-11',false],
+        ['C130','Lockheed C-130 Hercules','Lockheed C-130 Hercules',false]
+      ];
+      const aircraftPaths = new Map();
+      for (const [type,description,model,conflict] of typeCases) {
+        await page.evaluate(p => renderNearest(p,1), {...plane,type,description,track:45});
+        assert((await page.locator('#typeLine').textContent()).includes(model), name + ': wrong model name for ' + type);
+        assert.equal(await page.locator('#description').textContent(), type);
+        assert.equal(await page.locator('#identityNote').isVisible(), conflict, name + ': model conflict flag for ' + type);
+        aircraftPaths.set(type, await page.locator('#aircraftSilhouette').getAttribute('d'));
+      }
+      assert.notEqual(aircraftPaths.get('B738'), aircraftPaths.get('CL35'));
+      assert.notEqual(aircraftPaths.get('CRJ9'), aircraftPaths.get('B738'));
+      assert.notEqual(aircraftPaths.get('B722'), aircraftPaths.get('MD11'));
+      await page.evaluate(p => renderNearest(p,1), plane);
       const jet = await page.locator('#aircraftSilhouette').getAttribute('d');
       await page.evaluate(p => renderNearest(p,1), {...plane,type:'B06',category:'A7',track:null});
       assert.notEqual(await page.locator('#aircraftSilhouette').getAttribute('d'), jet);

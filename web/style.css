@@ -44,6 +44,8 @@ main { min-width: 0; min-height: 0; }
 .mode.active { display: grid; }
 .nearest-grid { grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr); gap: 12px; }
 .nearest-card, .stats-card, .contacts-card { padding: 16px; min-width: 0; min-height: 0; }
+.nearest-card { overflow-y: auto; }
+.identity-note { margin-top: 10px; padding: 7px 9px; color: var(--yellow); border-left: 2px solid var(--yellow); background: #2c2519; font-size: 10px; }
 .eyebrow { color: var(--muted); font-size: 11px; letter-spacing: 1px; line-height: 1.5; }
 .callsign { margin: 22px 0 8px; color: var(--cyan); font-size: 48px; font-size: clamp(32px, 4.4vw, 64px); line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .type-line { color: var(--muted); font-size: 12px; line-height: 1.7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -75,6 +77,8 @@ main { min-width: 0; min-height: 0; }
 .aircraft-visual figcaption small { display: block; color: var(--muted); font-size: 10px; line-height: 1.6; }
 .aircraft-visual.is-empty .aircraft-guide { opacity: .45; }
 .aircraft-visual.is-empty figcaption span { color: var(--muted); font-size: 10px; }
+.aircraft-visual.is-stale .aircraft-silhouette { fill: var(--muted); }
+.aircraft-visual.is-stale .aircraft-visual-title { color: var(--yellow); }
 
 .radar-grid { grid-template-columns: minmax(0, 1.5fr) minmax(240px, .65fr); gap: 12px; }
 .radar-card { position: relative; min-width: 0; min-height: 0; padding: 8px; background: #09141e; }

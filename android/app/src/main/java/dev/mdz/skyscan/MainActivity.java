@@ -27,6 +27,7 @@ public class MainActivity extends Activity {
     private WebView web;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private static final String ORIGIN = "https://appassets.androidplatform.net/";
+    private static final double MAX_CONTACT_AGE_SECONDS = 90;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -105,16 +106,24 @@ public class MainActivity extends Activity {
         return value.isEmpty() ? fallback : value;
     }
     private String direction(double degrees) {
+        degrees = heading(degrees);
         return new String[]{"N","NE","E","SE","S","SW","W","NW"}[(int)((degrees + 22.5) / 45) % 8];
     }
+    private double heading(double degrees) { return (degrees % 360 + 360) % 360; }
+    private Double finiteNumber(Object value) {
+        if (!(value instanceof Number)) return null;
+        double number = ((Number)value).doubleValue();
+        return Double.isNaN(number) || Double.isInfinite(number) ? null : number;
+    }
+    private Object jsonNumber(Double value) { return value == null ? JSONObject.NULL : value; }
     private String rounded(double value) { return String.format(Locale.US, "%.0f", value); }
 
     private JSONObject planes() throws Exception {
         JSONObject cfg = config();
         if (cfg.isNull("lat") || cfg.isNull("lon")) return new JSONObject().put("ok", false)
             .put("needs_location", true).put("error", "Set a location first").put("config", cfg).put("planes", new JSONArray());
-        double lat = cfg.getDouble("lat"), lon = cfg.getDouble("lon");
-        URL url = new URL("https://api.adsb.lol/v2/point/" + lat + "/" + lon + "/" + cfg.getDouble("radius_nm"));
+        double lat = cfg.getDouble("lat"), lon = cfg.getDouble("lon"), radius = cfg.getDouble("radius_nm");
+        URL url = new URL("https://api.adsb.lol/v2/point/" + lat + "/" + lon + "/" + radius);
         HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
         connection.setConnectTimeout(8000);
         connection.setReadTimeout(8000);
@@ -140,38 +149,47 @@ public class MainActivity extends Activity {
             JSONObject ac = contacts.optJSONObject(i);
             if (ac == null) continue;
             double alat = ac.optDouble("lat", Double.NaN), alon = ac.optDouble("lon", Double.NaN);
-            if (Double.isNaN(alat) || Double.isNaN(alon)) continue;
+            if (Double.isNaN(alat) || Double.isInfinite(alat) || Math.abs(alat) > 90 ||
+                Double.isNaN(alon) || Double.isInfinite(alon) || Math.abs(alon) > 180) continue;
+            // Unknown ages are retained; only a numeric age establishes staleness.
+            Double seen = finiteNumber(ac.opt("seen")), seenPos = finiteNumber(ac.opt("seen_pos"));
+            if ((seen != null && seen > MAX_CONTACT_AGE_SECONDS) ||
+                (seenPos != null && seenPos > MAX_CONTACT_AGE_SECONDS)) continue;
             double p1 = Math.toRadians(lat), p2 = Math.toRadians(alat), dl = Math.toRadians(alon - lon);
             double a = Math.pow(Math.sin((p2-p1)/2),2) + Math.cos(p1)*Math.cos(p2)*Math.pow(Math.sin(dl/2),2);
-            double dist = 6371.0088 * 2 * Math.asin(Math.sqrt(Math.min(1,a))) / 1.852;
+            double dist = 6371.0088 * 2 * Math.asin(Math.sqrt(Math.max(0,Math.min(1,a)))) / 1.852;
+            if (dist > radius) continue;
             double bearing = (Math.toDegrees(Math.atan2(Math.sin(dl)*Math.cos(p2),
                 Math.cos(p1)*Math.sin(p2)-Math.sin(p1)*Math.cos(p2)*Math.cos(dl))) + 360) % 360;
-            Object alt = ac.has("alt_baro") ? ac.opt("alt_baro") : ac.opt("alt_geom");
-            Object speed = ac.opt("gs"), track = ac.opt("track");
-            Object rate = ac.has("baro_rate") ? ac.opt("baro_rate") : ac.opt("geom_rate");
-            String altitude = "ground".equalsIgnoreCase(String.valueOf(alt)) ? "GROUND" :
-                alt instanceof Number ? String.format(Locale.US,"%,.0f FT",((Number)alt).doubleValue()) : "---";
+            Object altValue = ac.has("alt_baro") ? ac.opt("alt_baro") : ac.opt("alt_geom");
+            boolean onGround = altValue instanceof String && "ground".equalsIgnoreCase(((String)altValue).trim());
+            Double alt = finiteNumber(altValue), speed = finiteNumber(ac.opt("gs")), track = finiteNumber(ac.opt("track"));
+            Double rate = finiteNumber(ac.has("baro_rate") ? ac.opt("baro_rate") : ac.opt("geom_rate"));
+            if (track != null) track = heading(track);
+            String altitude = onGround ? "GROUND" : alt != null ? String.format(Locale.US,"%,.0f FT",alt) : "---";
             String vertical = "---";
-            if (rate instanceof Number) {
-                double v = ((Number)rate).doubleValue();
+            if (rate != null) {
+                double v = rate;
                 vertical = v > 100 ? "▲ " + rounded(v) + " FPM" : v < -100 ? "▼ " + rounded(-v) + " FPM" : "LEVEL";
             }
+            double flags = ac.optDouble("dbFlags", 0);
+            boolean military = !Double.isNaN(flags) && !Double.isInfinite(flags) && (ac.optInt("dbFlags",0)&1)!=0;
             sorted.add(new JSONObject().put("hex",text(ac,"hex","---"))
                 .put("callsign",text(ac,"flight","NO CALLSIGN")).put("registration",text(ac,"r","---"))
                 .put("type",text(ac,"t","---")).put("description",text(ac,"desc","---"))
-                .put("altitude",altitude).put("altitude_raw",alt == null ? JSONObject.NULL : alt)
-                .put("speed",speed instanceof Number ? rounded(((Number)speed).doubleValue()) + " KT" : "---")
-                .put("speed_raw",speed == null ? JSONObject.NULL : speed).put("vertical",vertical)
-                .put("track",track instanceof Number ? track : JSONObject.NULL)
-                .put("track_direction",track instanceof Number ? direction(((Number)track).doubleValue()) : "---")
-                .put("lat",alat).put("lon",alon).put("distance_nm",Math.round(dist*100)/100.0)
+                .put("altitude",altitude).put("altitude_raw",onGround ? altValue : jsonNumber(alt))
+                .put("speed",speed != null ? rounded(speed) + " KT" : "---")
+                .put("speed_raw",jsonNumber(speed)).put("vertical",vertical)
+                .put("track",jsonNumber(track)).put("track_direction",track != null ? direction(track) : "---")
+                .put("lat",alat).put("lon",alon).put("distance_nm",dist)
                 .put("bearing",Math.round(bearing*10)/10.0).put("bearing_direction",direction(bearing))
-                .put("squawk",text(ac,"squawk","---")).put("military",(ac.optInt("dbFlags",0)&1)!=0)
-                .put("category",text(ac,"category","---")).put("seen",ac.opt("seen")));
+                .put("squawk",text(ac,"squawk","---")).put("military",military)
+                .put("category",text(ac,"category","---")).put("seen",jsonNumber(seen)).put("seen_pos",jsonNumber(seenPos)));
         }
         sorted.sort(Comparator.comparingDouble(p -> p.optDouble("distance_nm")));
+        for (JSONObject plane : sorted) plane.put("distance_nm",Math.round(plane.getDouble("distance_nm")*100)/100.0);
         return new JSONObject().put("ok",true).put("needs_location",false).put("config",cfg)
-            .put("updated",System.currentTimeMillis()/1000).put("source_now",payload.opt("now"))
+            .put("updated",System.currentTimeMillis()/1000).put("source_now",jsonNumber(finiteNumber(payload.opt("now"))))
             .put("total",sorted.size()).put("planes",new JSONArray(sorted))
             .put("nearest",sorted.isEmpty() ? JSONObject.NULL : sorted.get(0));
     }

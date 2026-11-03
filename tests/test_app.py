@@ -32,7 +32,7 @@ class TrackerTests(unittest.TestCase):
 
     def get(self, path):
         with urllib.request.urlopen(self.url + path) as response:
-            return json.load(response)
+            return json.loads(response.read(), parse_constant=lambda value: self.fail(f"Invalid JSON number: {value}"))
 
     def save(self, data):
         request = urllib.request.Request(self.url + "/api/config", json.dumps(data).encode(),
@@ -86,10 +86,25 @@ class TrackerTests(unittest.TestCase):
     def test_live_payload_normalization(self):
         self.save({"lat": 43.65, "lon": -79.38})
         payload = {"ac": [
-            {"hex": "far", "lat": 44, "lon": -79.38, "alt_baro": "ground"},
-            {"hex": "near", "lat": 43.66, "lon": -79.38, "t": "B747", "flight": " TEST ", "dbFlags": 1},
+            {"hex": "c00123", "lat": 44, "lon": -79.38, "alt_baro": "ground",
+             "t": "CL35", "flight": " JET42 ", "r": "C-GJET", "desc": "Bombardier Challenger 350"},
+            {"hex": "c00456", "lat": 43.66, "lon": -79.38, "t": "B738", "flight": " ROU1357 ",
+             "r": "C-F737", "desc": "Boeing 737-800", "dbFlags": 1, "seen": 1, "seen_pos": 2},
             {"hex": "missing-position"},
         ]}
+        data = self.planes_fixture(payload)
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["total"], 2)
+        nearest = data["nearest"]
+        self.assertEqual((nearest["hex"], nearest["type"], nearest["callsign"], nearest["registration"], nearest["description"]),
+                         ("c00456", "B738", "ROU1357", "C-F737", "Boeing 737-800"))
+        self.assertTrue(nearest["military"])
+        farther = data["planes"][1]
+        self.assertEqual((farther["hex"], farther["type"], farther["callsign"], farther["registration"]),
+                         ("c00123", "CL35", "JET42", "C-GJET"))
+        self.assertEqual(farther["altitude"], "GROUND")
+
+    def planes_fixture(self, payload):
         # Patch only the remote request: keep local HTTP calls real.
         original = urllib.request.urlopen
         def remote_or_local(request, *args, **kwargs):
@@ -98,13 +113,72 @@ class TrackerTests(unittest.TestCase):
                 return io.BytesIO(json.dumps(payload).encode())
             return original(request, *args, **kwargs)
         with patch.object(app.urllib.request, "urlopen", side_effect=remote_or_local):
-            data = self.get("/api/planes")
+            return self.get("/api/planes")
+
+    def test_invalid_stale_and_outside_contacts_cannot_be_nearest(self):
+        self.save({"lat": 43.65, "lon": -79.38, "radius_nm": 80})
+        data = self.planes_fixture({"ac": [
+            {"hex": "current", "lat": 43.66, "lon": -79.38, "t": "B738"},
+            {"hex": "old-message", "lat": 43.65001, "lon": -79.38, "seen": 90.1},
+            {"hex": "old-position", "lat": 43.65002, "lon": -79.38, "seen": 1, "seen_pos": 91},
+            {"hex": "nan", "lat": float("nan"), "lon": -79.38},
+            {"hex": "infinite", "lat": 43.65, "lon": float("inf")},
+            {"hex": "invalid-lat", "lat": 91, "lon": -79.38},
+            {"hex": "invalid-lon", "lat": 43.65, "lon": 181},
+            {"hex": "bool-lat", "lat": True, "lon": -79.38},
+            {"hex": "outside-radius", "lat": 45.1, "lon": -79.38},
+            None,
+        ]})
+        self.assertEqual([plane["hex"] for plane in data["planes"]], ["current"])
+        self.assertEqual(data["nearest"]["type"], "B738")
+
+    def test_unknown_ages_and_threshold_age_remain_eligible(self):
+        self.save({"lat": 43.65, "lon": -79.38})
+        data = self.planes_fixture({"ac": [
+            {"hex": "no-age", "lat": 43.66, "lon": -79.38},
+            {"hex": "unknown-age", "lat": 43.67, "lon": -79.38, "seen": "unknown", "seen_pos": None},
+            {"hex": "boundary-age", "lat": 43.68, "lon": -79.38, "seen": 90, "seen_pos": 90},
+        ]})
+        self.assertEqual([plane["hex"] for plane in data["planes"]], ["no-age", "unknown-age", "boundary-age"])
+        self.assertEqual(data["nearest"]["hex"], "no-age")
+        self.assertIsNone(data["planes"][1]["seen"])
+
+    def test_bad_optional_telemetry_is_unknown_and_feed_is_valid_json(self):
+        self.save({"lat": 43.65, "lon": -79.38})
+        data = self.planes_fixture({"now": float("inf"), "ac": [
+            {"hex": "nan-values", "lat": 43.66, "lon": -79.38, "alt_baro": float("nan"),
+             "gs": float("inf"), "track": float("-inf"), "baro_rate": float("nan"),
+             "seen": float("nan"), "seen_pos": float("inf"), "dbFlags": float("inf")},
+            {"hex": "wrapped-heading", "lat": 43.67, "lon": -79.38, "track": -90},
+            {"hex": "extra-revolution", "lat": 43.68, "lon": -79.38, "track": 450},
+        ]})
         self.assertTrue(data["ok"])
-        self.assertEqual(data["total"], 2)
-        self.assertEqual(data["nearest"]["type"], "B747")
-        self.assertEqual(data["nearest"]["callsign"], "TEST")
-        self.assertTrue(data["nearest"]["military"])
-        self.assertEqual(data["planes"][1]["altitude"], "GROUND")
+        self.assertEqual(data["total"], 3)
+        invalid = data["nearest"]
+        for field in ("altitude_raw", "speed_raw", "track", "seen", "seen_pos"):
+            self.assertIsNone(invalid[field], field)
+        for field in ("altitude", "speed", "vertical", "track_direction"):
+            self.assertEqual(invalid[field], "---", field)
+        self.assertFalse(invalid["military"])
+        self.assertIsNone(data["source_now"])
+        self.assertEqual((data["planes"][1]["track"], data["planes"][1]["track_direction"]), (270, "W"))
+        self.assertEqual((data["planes"][2]["track"], data["planes"][2]["track_direction"]), (90, "E"))
+
+    def test_nearest_uses_unrounded_distance(self):
+        self.save({"lat": 43.65, "lon": -79.38})
+        data = self.planes_fixture({"ac": [
+            {"hex": "farther", "lat": 43.65002, "lon": -79.38, "t": "CL35"},
+            {"hex": "closer", "lat": 43.65001, "lon": -79.38, "t": "B738"},
+        ]})
+        self.assertEqual(data["planes"][0]["distance_nm"], data["planes"][1]["distance_nm"])
+        self.assertEqual(data["nearest"]["hex"], "closer")
+
+    def test_conflicting_source_identity_is_not_replaced_with_a_guess(self):
+        self.save({"lat": 43.65, "lon": -79.38})
+        data = self.planes_fixture({"ac": [{"hex": "conflict", "lat": 43.66, "lon": -79.38,
+            "t": "B738", "desc": "Bombardier Challenger 350", "flight": "CL350", "r": "C-TEST"}]})
+        self.assertEqual((data["nearest"]["type"], data["nearest"]["description"], data["nearest"]["callsign"]),
+                         ("B738", "Bombardier Challenger 350", "CL350"))
 
 
 if __name__ == "__main__":

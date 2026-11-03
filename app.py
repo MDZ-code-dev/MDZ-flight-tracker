@@ -27,7 +27,8 @@ WEB_DIR = ROOT / "web"
 CONFIG_FILE = Path(os.environ.get("MDZ_TRACKER_CONFIG", str(ROOT / "config.json")))
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("MDZ_TRACKER_PORT", "8765"))
-APP_VERSION = "1.0.8"
+APP_VERSION = "1.0.9"
+MAX_CONTACT_AGE_SECONDS = 90
 
 
 def frontend_build_id() -> str:
@@ -116,7 +117,7 @@ def haversine_nm(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     dp = math.radians(lat2 - lat1)
     dl = math.radians(lon2 - lon1)
     a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
-    km = 2 * r_km * math.asin(math.sqrt(a))
+    km = 2 * r_km * math.asin(math.sqrt(max(0, min(1, a))))
     return km / 1.852
 
 
@@ -140,6 +141,26 @@ def clean_text(value, fallback="---") -> str:
         return fallback
     text = str(value).strip()
     return text if text else fallback
+
+
+def finite_number(value):
+    """Provider telemetry must be a finite JSON number; other values are unknown."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    try:
+        return value if math.isfinite(value) else None
+    except OverflowError:
+        return None
+
+
+def coordinate(value, limit):
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return number if math.isfinite(number) and -limit <= number <= limit else None
 
 
 def fetch_planes() -> dict:
@@ -176,32 +197,40 @@ def fetch_planes() -> dict:
 
     planes = []
     for ac in payload.get("ac", []):
-        try:
-            alat = float(ac["lat"])
-            alon = float(ac["lon"])
-        except (KeyError, TypeError, ValueError):
+        if not isinstance(ac, dict):
+            continue
+        alat, alon = coordinate(ac.get("lat"), 90), coordinate(ac.get("lon"), 180)
+        if alat is None or alon is None:
+            continue
+        # An old position can be closer than the aircraft's current location.
+        # Missing or unrecognised ages do not establish that a contact is stale.
+        seen, seen_pos = finite_number(ac.get("seen")), finite_number(ac.get("seen_pos"))
+        if any(age is not None and age > MAX_CONTACT_AGE_SECONDS for age in (seen, seen_pos)):
             continue
 
         dist = haversine_nm(lat, lon, alat, alon)
+        if dist > radius:
+            continue
         brg = bearing_deg(lat, lon, alat, alon)
 
         alt = ac.get("alt_baro", ac.get("alt_geom"))
-        on_ground = str(alt).lower() == "ground"
+        on_ground = isinstance(alt, str) and alt.strip().lower() == "ground"
+        alt = alt if on_ground else finite_number(alt)
         if on_ground:
             alt_display = "GROUND"
-        elif isinstance(alt, (int, float)):
+        elif alt is not None:
             alt_display = f"{int(round(alt)):,} FT"
         else:
             alt_display = "---"
 
-        speed = ac.get("gs")
-        speed_display = f"{int(round(speed))} KT" if isinstance(speed, (int, float)) else "---"
+        speed = finite_number(ac.get("gs"))
+        speed_display = f"{int(round(speed))} KT" if speed is not None else "---"
 
-        track = ac.get("track")
-        track_num = float(track) if isinstance(track, (int, float)) else None
+        track = finite_number(ac.get("track"))
+        track_num = track % 360 if track is not None else None
 
-        vrate = ac.get("baro_rate", ac.get("geom_rate"))
-        if isinstance(vrate, (int, float)):
+        vrate = finite_number(ac.get("baro_rate", ac.get("geom_rate")))
+        if vrate is not None:
             if vrate > 100:
                 vertical = f"▲ {int(round(vrate))} FPM"
             elif vrate < -100:
@@ -214,7 +243,7 @@ def fetch_planes() -> dict:
         db_flags = ac.get("dbFlags", 0)
         try:
             military = bool(int(db_flags) & 1)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             military = False
 
         planes.append({
@@ -232,21 +261,24 @@ def fetch_planes() -> dict:
             "track_direction": direction(track_num),
             "lat": alat,
             "lon": alon,
-            "distance_nm": round(dist, 2),
+            "distance_nm": dist,
             "bearing": round(brg, 1),
             "bearing_direction": direction(brg),
             "squawk": clean_text(ac.get("squawk")),
             "category": clean_text(ac.get("category")),
             "military": military,
-            "seen": ac.get("seen"),
+            "seen": seen,
+            "seen_pos": seen_pos,
         })
 
     planes.sort(key=lambda plane: plane["distance_nm"])
+    for plane in planes:
+        plane["distance_nm"] = round(plane["distance_nm"], 2)
     return {
         "ok": True,
         "needs_location": False,
         "updated": int(time.time()),
-        "source_now": payload.get("now"),
+        "source_now": finite_number(payload.get("now")),
         "total": len(planes),
         "config": cfg,
         "nearest": planes[0] if planes else None,

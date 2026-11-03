@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
   <title>MDZ SkyScan</title>
-  <link rel="stylesheet" href="style.css?v=1.0.8">
+  <link rel="stylesheet" href="style.css?v=1.0.9">
 </head>
 <body>
   <div class="app">
@@ -26,11 +26,12 @@
           <div class="eyebrow">◆ NEAREST AIRCRAFT</div>
           <div id="callsign" class="callsign">SCANNING</div>
           <div id="typeLine" class="type-line">WAITING FOR LIVE DATA...</div>
+          <div id="identityNote" class="identity-note" role="status" hidden></div>
 
           <div class="info-grid">
             <div class="box"><small>REGISTRATION</small><strong id="registration">---</strong></div>
             <div class="box"><small>ICAO HEX</small><strong id="hex">---</strong></div>
-            <div class="box"><small>AIRCRAFT</small><strong id="description">---</strong></div>
+            <div class="box"><small>REPORTED TYPE</small><strong id="description">---</strong></div>
             <div class="box"><small>SQUAWK</small><strong id="squawk">---</strong></div>
           </div>
 
@@ -51,7 +52,7 @@
             <div class="box"><small>IN RANGE</small><strong id="count">0</strong></div>
           </div>
           <figure id="aircraftVisual" class="aircraft-visual is-empty" role="img" aria-label="Waiting for tracked aircraft">
-            <span class="aircraft-visual-title">TRACKED AIRCRAFT</span>
+            <span id="aircraftVisualTitle" class="aircraft-visual-title">TRACKED AIRCRAFT</span>
             <svg class="aircraft-visual-svg" viewBox="0 0 240 240" aria-hidden="true" focusable="false">
               <g class="aircraft-guide" fill="none">
                 <path d="M20 42V20H42 M198 20H220V42 M220 198V220H198 M42 220H20V198" />
@@ -87,7 +88,7 @@
       <span id="updated">LAST UPDATE: --:--:--</span>
       <span>DATA: ADSB.LOL • ODbL</span>
       <span id="rangeFooter">RANGE: 80 NM</span>
-      <span id="appVersion">v1.0.8</span>
+      <span id="appVersion">v1.0.9</span>
     </footer>
   </div>
 
@@ -110,8 +111,8 @@
     </div>
   </div>
 
-  <script src="native.js?v=1.0.8"></script>
-  <script src="silhouettes.js?v=1.0.8"></script>
-  <script src="app.js?v=1.0.8"></script>
+  <script src="native.js?v=1.0.9"></script>
+  <script src="silhouettes.js?v=1.0.9"></script>
+  <script src="app.js?v=1.0.9"></script>
 </body>
 </html>

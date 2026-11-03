@@ -90,7 +90,7 @@ class NativeWindowProbe:
                 health = json.load(response)
             require(health.get("ok") is True and health.get("app") == "mdz-skyscan",
                     f"Unexpected health response: {health!r}")
-            require(health.get("version") == "1.0.8", f"Wrong app version: {health!r}")
+            require(health.get("version") == "1.0.9", f"Wrong app version: {health!r}")
             require(len(health.get("build", "")) == 64, "Health response has no build hash")
 
             # Wait for startup's asynchronous config read before closing its
@@ -127,7 +127,7 @@ class NativeWindowProbe:
             })()""")
             require(result["fontLoaded"] and result["fontUsed"],
                     f"Bundled pixel font did not load in GTK: {result!r}")
-            require(result["version"] == "v1.0.8", "Window is showing an old UI version")
+            require(result["version"] == "v1.0.9", "Window is showing an old UI version")
             require(result["model"] == "B744", "Nearest mode did not show the aircraft model")
             require(result["path"] and result["length"] > 0, "Aircraft silhouette is empty")
             require(result["transform"] == "rotate(238 120 120)", "Silhouette heading is wrong")
@@ -199,7 +199,7 @@ def main():
             raise probe.failure
         ensure_backend_stopped(probe.url)
         print("PASS: real GTK window, bundled pixel font, visible B744 silhouette, radar, "
-              "v1.0.8 health, and backend shutdown", flush=True)
+              "v1.0.9 health, and backend shutdown", flush=True)
     finally:
         watchdog.cancel()
 

@@ -14,6 +14,18 @@ recognized and turns with the reported heading. Other models use a generic
 silhouette; these are family outlines, not exact model drawings. No aircraft in
 range clears the silhouette.
 
+Aircraft identification uses the reported ICAO type code. The catalog includes
+readable model names and separate 737, Challenger, rear-engine regional jet,
+trijet, four-engine turboprop and other family outlines. A recognizable conflicting
+source description shows **MODEL DATA CONFLICT**; hovering that note or the model
+line shows the original source details. Callsigns do not determine aircraft models.
+
+Nearest mode rejects invalid coordinates, out-of-range contacts and contacts
+whose reported message/position age exceeds 90 seconds. Unknown ages remain
+eligible. Slow responses cannot overwrite a newer aircraft or a changed location.
+When the feed fails, a retained contact is marked **LAST KNOWN AIRCRAFT**.
+Incorrect upstream metadata can still require checking the ICAO hex or registration.
+
 The interface uses the bundled **Silkscreen** pixel font, so the same typography
 works offline on Windows, Linux, and Android. Its SIL Open Font License and
 copyright notice are included in `web/OFL-Silkscreen.txt`.
@@ -189,6 +201,7 @@ no third-party packages; the app launcher never opens a browser. Run the checks 
 ```bash
 python3 -m unittest discover -s tests -v
 node tests/test_web.cjs
+node tests/test_aircraft_catalog.cjs
 ```
 
 Node.js is needed only for JavaScript checks. The Python suite exercises the real
