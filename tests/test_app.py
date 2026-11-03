@@ -42,7 +42,8 @@ class TrackerTests(unittest.TestCase):
 
     def test_bundled_ui_and_health(self):
         self.assertEqual(self.get("/health"), {"ok": True})
-        for path, marker in [("/", b"MDZ SKYSCAN"), ("/native.js", b"mdzFetch"), ("/app.js", b"aircraftLabel")]:
+        for path, marker in [("/", b"MDZ SKYSCAN"), ("/native.js", b"mdzFetch"),
+                             ("/silhouettes.js", b"aircraftProfile"), ("/app.js", b"aircraftLabel")]:
             with urllib.request.urlopen(self.url + path) as response:
                 self.assertIn(marker, response.read())
 

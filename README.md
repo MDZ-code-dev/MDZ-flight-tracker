@@ -8,6 +8,12 @@ B747), callsign, registration, altitude, speed, heading, distance and bearing.
 **Radar** shows nearby contacts and a scrolling list. Use **MODE** to switch views.
 Models appear when supplied by the data source; missing models display UNKNOWN.
 
+Nearest mode also shows a cyan aircraft silhouette beneath the flight data. It
+uses a matching aircraft family (jet, turboprop, light plane, or helicopter) when
+recognized and turns with the reported heading. Other models use a generic
+silhouette; these are family outlines, not exact model drawings. No aircraft in
+range clears the silhouette.
+
 ## Downloads
 
 Open **[Releases](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases)**

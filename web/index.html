@@ -50,6 +50,19 @@
             <div class="box"><small>BEARING FROM YOU</small><strong id="bearing2">---</strong></div>
             <div class="box"><small>IN RANGE</small><strong id="count">0</strong></div>
           </div>
+          <figure id="aircraftVisual" class="aircraft-visual is-empty" role="img" aria-label="Waiting for tracked aircraft">
+            <svg class="aircraft-visual-svg" viewBox="0 0 240 240" aria-hidden="true" focusable="false">
+              <g class="aircraft-guide" fill="none">
+                <path d="M20 42V20H42 M198 20H220V42 M220 198V220H198 M42 220H20V198" />
+                <path d="M120 12V28 M120 212V228 M12 120H28 M212 120H228" />
+              </g>
+              <path id="aircraftSilhouette" class="aircraft-silhouette" d="" />
+            </svg>
+            <figcaption>
+              <span id="aircraftVisualType">WAITING FOR AIRCRAFT</span>
+              <small id="aircraftVisualProfile"></small>
+            </figcaption>
+          </figure>
           <div class="track-strip">
             <small>TRACK VECTOR</small>
             <div id="headingBig">---°</div>
@@ -96,6 +109,7 @@
   </div>
 
   <script src="native.js"></script>
+  <script src="silhouettes.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

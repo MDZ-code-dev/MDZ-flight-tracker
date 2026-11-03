@@ -11,7 +11,25 @@ function updateRange(){const r=valueOr(state.config.radius_nm,80);setText('radar
 function aircraftLabel(p){
   return [p.type,p.description].map(value=>String(valueOr(value,'')).trim()).find(value=>value&&value!=='---')||'UNKNOWN'
 }
+function renderAircraftSilhouette(plane){
+  const visual=$('aircraftVisual'),shape=$('aircraftSilhouette');
+  visual.classList.toggle('is-empty',!plane);
+  if(!plane){
+    shape.setAttribute('d','');shape.removeAttribute('transform');
+    visual.setAttribute('aria-label','No aircraft in range');
+    setText('aircraftVisualType','NO AIRCRAFT IN RANGE');setText('aircraftVisualProfile','');
+    return
+  }
+  const profile=aircraftProfile(plane),label=aircraftLabel(plane);
+  const heading=typeof plane.track==='number'&&isFinite(plane.track)?((plane.track%360)+360)%360:null;
+  shape.setAttribute('d',profile.path);
+  shape.setAttribute('transform',`rotate(${heading==null?0:heading} 120 120)`);
+  visual.setAttribute('aria-label',`${label} silhouette, ${profile.name.toLowerCase()}, ${heading==null?'heading unknown':`heading ${Math.round(heading)} degrees`}`);
+  setText('aircraftVisualType',label);
+  setText('aircraftVisualProfile',profile.name+(heading==null?' · HEADING UNKNOWN':''))
+}
 function renderNearest(p,total){
+  renderAircraftSilhouette(p);
   if(!p){['callsign','registration','hex','description','squawk','altitude','speed','vertical','heading','bearing2','headingBig'].forEach(id=>setText(id,'---'));setText('typeLine','NO AIRCRAFT IN RANGE');setText('distance','--.- NM');setText('bearing','---° ---');setText('count',String(total||0));return}
   const mil=p.military?' [MIL]':'';setText('callsign',p.callsign+mil);setText('typeLine',`${p.type} // ${p.description}`);setText('registration',p.registration);setText('hex',p.hex.toUpperCase());setText('description',aircraftLabel(p));setText('squawk',p.squawk);setText('distance',`${p.distance_nm.toFixed(1)} NM`);setText('bearing',`${Math.round(p.bearing)}° ${p.bearing_direction}`);setText('altitude',p.altitude);setText('speed',p.speed);setText('vertical',p.vertical);setText('heading',p.track==null?'---':`${Math.round(p.track)}° ${p.track_direction}`);setText('bearing2',`${Math.round(p.bearing)}° ${p.bearing_direction}`);setText('count',String(total));setText('headingBig',p.track==null?'---°':`${Math.round(p.track)}°`)
 }
