@@ -13,6 +13,36 @@ from pathlib import Path
 WINDOW_TITLE = "MDZ SkyScan"
 
 
+def require_windows_runtime():
+    # pywebview otherwise silently falls back to legacy MSHTML, which cannot
+    # run this interface. Detect the supported renderer before creating a GUI.
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                            r"SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full") as key:
+            framework = int(winreg.QueryValueEx(key, "Release")[0])
+        if framework < 394802:
+            raise ValueError("Unsupported .NET Framework version")
+    except (OSError, ValueError) as error:
+        raise RuntimeError("Microsoft .NET Framework 4.6.2 or newer is required. "
+                           "Install .NET Framework 4.8 and reopen SkyScan.") from error
+    roots = (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER)
+    runtime = r"\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+    for root in roots:
+        for prefix in ("SOFTWARE", r"SOFTWARE\WOW6432Node"):
+            try:
+                with winreg.OpenKey(root, prefix + runtime) as key:
+                    version = str(winreg.QueryValueEx(key, "pv")[0])
+                    if int(version.split(".")[0]) >= 86:
+                        return
+            except (OSError, ValueError):
+                pass
+    raise RuntimeError(
+        "Microsoft Edge WebView2 Runtime is required. Run the included "
+        "MicrosoftEdgeWebview2Setup.exe, then reopen SkyScan."
+    )
+
+
 def load_webview():
     try:
         return importlib.import_module("webview")
@@ -32,6 +62,21 @@ def configure_settings():
         os.environ["MDZ_TRACKER_CONFIG"] = str(base / "mdz-skyscan" / "config.json")
 
 
+def configure_native_test(view):
+    # The frozen-app CI test connects to the embedded renderer, not a separate
+    # browser. Normal launches never open a debugging port or developer tools.
+    value = os.environ.get("MDZ_NATIVE_TEST_PORT")
+    enabled = os.environ.get("CI") == "true" and os.environ.get("MDZ_DESKTOP_STATE_FILE") and value
+    if not enabled:
+        return False
+    port = int(value)
+    if not 1 <= port <= 65535:
+        raise ValueError("Invalid native CI test port")
+    view.settings["REMOTE_DEBUGGING_PORT"] = port
+    view.settings["OPEN_DEVTOOLS_IN_DEBUG"] = False
+    return True
+
+
 def write_runtime_info(app, url, renderer):
     # Optional diagnostics for the frozen-app smoke test; never enable debugging
     # or expose an application control API in normal operation.
@@ -49,6 +94,9 @@ def write_runtime_info(app, url, renderer):
 def main():
     configure_settings()
     view = load_webview()
+    if sys.platform == "win32":
+        require_windows_runtime()
+    native_test = configure_native_test(view)
     import app
 
     # Each window owns a backend. An old release can neither supply this UI nor
@@ -72,7 +120,7 @@ def main():
         write_runtime_info(app, url, renderer)
         # pywebview requires its GUI event loop on the main thread. No default
         # browser is opened, including when dependencies or the renderer fail.
-        view.start(gui=renderer, debug=False)
+        view.start(gui=renderer, debug=native_test)
     finally:
         server.shutdown()
         server.server_close()

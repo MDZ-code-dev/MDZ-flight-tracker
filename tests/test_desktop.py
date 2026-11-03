@@ -21,7 +21,9 @@ class NativeLauncherTests(unittest.TestCase):
         self.environment.start()
         os.environ.pop("MDZ_TRACKER_PORT", None)
         os.environ.pop("MDZ_DESKTOP_STATE_FILE", None)
+        os.environ.pop("MDZ_NATIVE_TEST_PORT", None)
         self.view = Mock()
+        self.view.settings = {}
         self.urls = []
         self.view.create_window.side_effect = lambda title, url, **kwargs: self.urls.append(url)
 
@@ -110,6 +112,7 @@ class NativeLauncherTests(unittest.TestCase):
         state = Path(self.tmp.name) / "runtime.json"
         os.environ["MDZ_DESKTOP_STATE_FILE"] = str(state)
         with patch.object(desktop, "load_webview", return_value=self.view), \
+             patch.object(desktop, "require_windows_runtime"), \
              patch.object(desktop.sys, "platform", "win32"):
             desktop.main()
         data = json.loads(state.read_text())
@@ -119,6 +122,27 @@ class NativeLauncherTests(unittest.TestCase):
         self.assertEqual(data["version"], app.APP_VERSION)
         self.view.start.assert_called_once_with(gui="edgechromium", debug=False)
         self.assert_stopped(self.urls[0])
+
+    def test_windows_missing_runtime_cannot_fall_back_to_legacy_renderer(self):
+        with patch.object(desktop, "load_webview", return_value=self.view), \
+             patch.object(desktop.sys, "platform", "win32"), \
+             patch.object(desktop, "require_windows_runtime", side_effect=RuntimeError("WebView2 required")), \
+             patch.object(app, "TrackerHTTPServer") as server:
+            with self.assertRaisesRegex(RuntimeError, "WebView2 required"):
+                desktop.main()
+        server.assert_not_called()
+        self.view.create_window.assert_not_called()
+
+    def test_native_debugging_is_disabled_outside_explicit_ci(self):
+        os.environ["MDZ_NATIVE_TEST_PORT"] = "12345"
+        os.environ["MDZ_DESKTOP_STATE_FILE"] = str(Path(self.tmp.name) / "state.json")
+        os.environ["CI"] = "false"
+        self.assertFalse(desktop.configure_native_test(self.view))
+        self.assertEqual(self.view.settings, {})
+        os.environ["CI"] = "true"
+        self.assertTrue(desktop.configure_native_test(self.view))
+        self.assertEqual(self.view.settings["REMOTE_DEBUGGING_PORT"], 12345)
+        self.assertFalse(self.view.settings["OPEN_DEVTOOLS_IN_DEBUG"])
 
 
 if __name__ == "__main__":

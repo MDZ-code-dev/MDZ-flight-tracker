@@ -24,6 +24,7 @@ $portProbe.Start()
 $debugPort = $portProbe.LocalEndpoint.Port
 $portProbe.Stop()
 $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$debugPort --remote-debugging-address=127.0.0.1"
+$env:MDZ_NATIVE_TEST_PORT = [string]$debugPort
 $env:MDZ_NATIVE_CDP_URL = "http://127.0.0.1:$debugPort"
 
 try {

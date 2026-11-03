@@ -27,7 +27,7 @@ WEB_DIR = ROOT / "web"
 CONFIG_FILE = Path(os.environ.get("MDZ_TRACKER_CONFIG", str(ROOT / "config.json")))
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("MDZ_TRACKER_PORT", "8765"))
-APP_VERSION = "1.0.6"
+APP_VERSION = "1.0.7"
 
 
 def frontend_build_id() -> str:
