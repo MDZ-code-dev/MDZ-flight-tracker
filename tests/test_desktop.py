@@ -66,8 +66,15 @@ class NativeLauncherTests(unittest.TestCase):
         browser.assert_not_called()
 
     def test_dependency_error_explains_installation(self):
-        with patch.object(desktop.importlib, "import_module", side_effect=ImportError("webview")):
+        with patch.object(desktop.importlib, "import_module", side_effect=ImportError("webview")), \
+             patch.object(desktop.sys, "platform", "win32"):
             with self.assertRaisesRegex(RuntimeError, "desktop-requirements.txt"):
+                desktop.load_webview()
+
+    def test_linux_dependency_error_names_the_installer(self):
+        with patch.object(desktop.importlib, "import_module", side_effect=ImportError("webview")), \
+             patch.object(desktop.sys, "platform", "linux"):
+            with self.assertRaisesRegex(RuntimeError, "bash install.sh"):
                 desktop.load_webview()
 
     def test_window_never_reuses_an_old_server(self):

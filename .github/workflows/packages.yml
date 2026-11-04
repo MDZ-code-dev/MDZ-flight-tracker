@@ -23,22 +23,32 @@ jobs:
           node-version: '22'
       - run: node tests/test_web.cjs
       - run: node tests/test_aircraft_catalog.cjs
-      - name: Install Linux native window prerequisites
+      - run: python scripts/package_desktop.py
+      - name: Prepare the Linux test display
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-venv python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1 xvfb xauth dbus-x11
-          /usr/bin/python3 -m venv --system-site-packages "$RUNNER_TEMP/mdz-gtk"
-          "$RUNNER_TEMP/mdz-gtk/bin/python" -m pip install -r desktop-requirements.txt
+          sudo apt-get install -y xvfb xauth dbus-x11
+      - name: Install and recheck the actual Linux download
+        run: bash tests/smoke_linux_install.sh
       - name: Verify native Linux app window and shutdown
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
           WEBKIT_DISABLE_DMABUF_RENDERER: '1'
-        run: dbus-run-session -- xvfb-run -a "$RUNNER_TEMP/mdz-gtk/bin/python" tests/smoke_linux_window.py
-      - run: python scripts/package_desktop.py
+        run: dbus-run-session -- xvfb-run -a "$MDZ_TEST_PYTHON" tests/smoke_linux_window.py
       - uses: actions/upload-artifact@v4
         with:
           name: desktop-portable
           path: dist/*
+  fedora:
+    runs-on: ubuntu-24.04
+    container: fedora:43
+    steps:
+      - name: Prepare Fedora checkout tools and distro Python
+        run: dnf install -y git tar gzip ca-certificates libstdc++ python3
+      - uses: actions/checkout@v4
+      - run: /usr/bin/python3 scripts/package_desktop.py
+      - name: Install and recheck the actual download on Fedora
+        run: bash tests/smoke_linux_install.sh
   windows:
     runs-on: windows-latest
     steps:
@@ -150,7 +160,7 @@ jobs:
           path: dist/MDZ-SkyScan-android.apk
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [portable, windows, android]
+    needs: [portable, fedora, windows, android]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

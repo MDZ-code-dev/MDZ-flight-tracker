@@ -37,7 +37,7 @@ and expand **Assets** on a completed release:
 
 | Platform | Download | Requirements |
 | --- | --- | --- |
-| Linux / Switchroot Fedora | [MDZ-SkyScan-linux.tar.gz](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases/latest/download/MDZ-SkyScan-linux.tar.gz) | Python 3.10+, GTK/WebKit2GTK and pywebview; ARM64 and x86-64 supported |
+| Linux / Switchroot Fedora | [MDZ-SkyScan-linux.tar.gz](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases/latest/download/MDZ-SkyScan-linux.tar.gz) | Distro Python 3.10+; included installer prepares GTK/WebKit and Python dependencies; ARM64 and x86-64 supported |
 | Windows app | [MDZ-SkyScan-windows.exe](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases/latest/download/MDZ-SkyScan-windows.exe) | Windows 10/11, x86-64; Edge WebView2 Runtime |
 | Windows ZIP (app + runtime installer) | [MDZ-SkyScan-windows.zip](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases/latest/download/MDZ-SkyScan-windows.zip) | Windows 10/11, x86-64; Edge WebView2 Runtime; no separate Python installation |
 | Windows source alternative | [MDZ-SkyScan-windows-portable.zip](https://github.com/MDZ-code-dev/MDZ-flight-tracker/releases/latest/download/MDZ-SkyScan-windows-portable.zip) | Python 3.11+ and desktop-requirements.txt installed separately |
@@ -54,36 +54,45 @@ GitHub's automatic “Source code” archives are not the packaged app.
 ## Linux / Switchroot Fedora
 
 1. Download and extract `MDZ-SkyScan-linux.tar.gz`.
-2. Install the native window prerequisites. On Fedora / Switchroot Fedora:
+2. Open a terminal in the extracted `MDZ-SkyScan` folder and run:
 
    ```bash
-   sudo dnf install python3 python3-pip python3-gobject gtk3 webkit2gtk4.1
+   bash install.sh
    ```
 
-   On Debian / Ubuntu:
+3. Open **MDZ SkyScan** from your application launcher, or run:
 
    ```bash
-   sudo apt install python3-venv python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1
+   bash start.sh
    ```
 
-3. Open a terminal in the extracted `MDZ-SkyScan` folder and prepare its Python environment:
+Run the installer as your regular user. It uses `sudo` for missing Fedora/Debian/
+Ubuntu system packages, then installs the pinned desktop Python dependencies in
+its own `.mdz-venv/pythonX.Y` environment. It validates GTK3, WebKit2GTK 4.1,
+PyGObject, Pycairo and pywebview before creating the shortcut. Repeating
+`bash install.sh` repairs incomplete setup and preserves your settings and any
+existing `.venv`. The launcher always uses this validated distro-Python environment.
 
-   ```bash
-   python3 -m venv --system-site-packages .venv
-   .venv/bin/python -m pip install -r desktop-requirements.txt
-   chmod +x MDZ-SkyScan.sh
-   ./MDZ-SkyScan.sh
-   ```
+If Python itself is missing, install your distro's `python3` package first.
+Administrators who prepare system packages separately can use the commands below,
+then run `bash install.sh --skip-system-packages` as the app user:
+
+```bash
+# Fedora / Switchroot Fedora
+sudo dnf install python3 python3-pip python3-gobject gtk3 webkit2gtk4.1
+
+# Debian / Ubuntu
+sudo apt install python3 python3-venv python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-webkit2-4.1
+```
 
 SkyScan opens in its own desktop window using GTK/WebKit. Closing the window stops
-its private background server. The virtual environment must use the distro's
-Python so it can access the distro PyGObject bindings. ARM64 Switchroot does not
-need Qt or architecture-specific Python WebView wheels.
+its private background server and releases the idle/sleep inhibitor on systemd
+systems. ARM64 Switchroot does not need Qt or architecture-specific Python WebView
+wheels. Keep the extracted app folder after installation; the shortcut points to it.
 
-### Original Switchroot desktop launcher
+### Install or update a Git checkout
 
-The Fedora desktop shortcut and idle/sleep inhibitor are available from a Git
-checkout. Install the Linux dependencies and `.venv` above, then:
+The same installer is included in the repository:
 
 ```bash
 git clone https://github.com/MDZ-code-dev/MDZ-flight-tracker.git
@@ -91,11 +100,11 @@ cd MDZ-flight-tracker
 bash install.sh
 ```
 
-Search the application launcher for **MDZ SkyScan**, or run `bash start.sh`.
-This uses `systemd-inhibit` to keep the Switch awake while its native app window
-is open. Closing the window stops the server and releases the sleep inhibitor.
-Use the portable launcher on systems without systemd or when sleep inhibition
-is unnecessary.
+For an existing checkout, run `git pull` followed by `bash install.sh`. If startup
+reports missing native window dependencies, rerun `bash install.sh` in that app
+folder. It also rebuilds the managed environment after a distro Python upgrade.
+Start with the application shortcut, `bash start.sh`, or `bash MDZ-SkyScan.sh`
+in the downloaded package.
 
 ## Windows
 
@@ -168,16 +177,15 @@ to `api.adsb.lol` over HTTPS to find nearby aircraft.
 
 | Launcher | Settings location |
 | --- | --- |
-| Linux portable | `$XDG_CONFIG_HOME/mdz-skyscan/config.json`, or `~/.config/mdz-skyscan/config.json` |
+| Linux app / `start.sh` | `$XDG_CONFIG_HOME/mdz-skyscan/config.json`, or `~/.config/mdz-skyscan/config.json` |
 | Windows executable / portable | `%LOCALAPPDATA%\mdz-skyscan\config.json` |
-| Original `app.py` / `start.sh` | `config.json` in the checkout |
+| Server-only `app.py` | `config.json` in the checkout |
 | Android | Private app preferences; cleared when uninstalling |
 
 Desktop overrides: `MDZ_TRACKER_CONFIG` selects a settings file;
 `MDZ_TRACKER_PORT` selects the HTTP port (default 8765). An explicitly selected
 port must be free; app windows never reuse another process. The desktop server binds
-only to `127.0.0.1`. Existing `start.sh` users keep their original settings;
-switching to a portable launcher uses a separate settings location.
+only to `127.0.0.1`. Linux app launchers share the same saved settings location.
 
 ## Develop and build
 
@@ -186,14 +194,13 @@ switching to a portable launcher uses a separate settings location.
 ```bash
 git clone https://github.com/MDZ-code-dev/MDZ-flight-tracker.git
 cd MDZ-flight-tracker
-python3 -m venv --system-site-packages .venv
-.venv/bin/python -m pip install -r desktop-requirements.txt
-.venv/bin/python desktop.py
+bash install.sh
+bash start.sh
 ```
 
 On Windows use Python 3.11+ with `py -3 -m pip install -r desktop-requirements.txt` and
 `py -3 desktop.py`. The native GUI loop runs on the main thread and owns its
-backend's lifecycle. Linux also needs the GTK dependencies listed above.
+backend's lifecycle. The Linux installer prepares the native window dependencies.
 For explicit browser-based development only, use `python3 app.py` and open its
 printed local address yourself. This server-only option needs Python 3.10+ and
 no third-party packages; the app launcher never opens a browser. Run the checks with:
@@ -222,7 +229,11 @@ py -3 -m pip install pyinstaller==6.16.0 -r desktop-requirements.txt
 py -3 -m PyInstaller --noconfirm --clean --onefile --windowed --name MDZ-SkyScan --collect-all webview --collect-all pythonnet --collect-all clr_loader --add-data "web;web" desktop.py
 ```
 
-The app is `dist/MDZ-SkyScan.exe`. GitHub Actions tests a downloaded-file scenario:
+Linux CI extracts the actual download into a path with spaces, runs its installer
+twice, checks preservation of user files, and opens the installed app's real GTK
+window on Ubuntu. A separate Fedora job checks DNF installation and native imports.
+
+The Windows app is `dist/MDZ-SkyScan.exe`. GitHub Actions tests a downloaded-file scenario:
 Internet-marked DLLs reproduce the older loader failure, then the new Internet-marked
 standalone executable must open its real app window, render the silhouette and pixel
 font, and shut down cleanly. The ZIP contains this same app and the official
@@ -276,7 +287,7 @@ git tag v1.0.3
 git push origin v1.0.3
 ```
 
-When all three platform jobs pass, the workflow publishes a GitHub Release with
+When all build and installation-test jobs pass, the workflow publishes a GitHub Release with
 packages and SHA-256 checksums. Failed jobs publish no release. GitHub Actions
 must be enabled and allow the release job's `contents: write` permission. Windows
 native tests and Android emulator tests run in CI; source archives alone do not

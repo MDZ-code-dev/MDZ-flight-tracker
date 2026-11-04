@@ -7,3 +7,6 @@ build/
 android/local.properties
 *.jks
 *.keystore
+
+.venv/
+.mdz-venv/

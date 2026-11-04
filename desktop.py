@@ -53,6 +53,12 @@ def load_webview():
     try:
         return importlib.import_module("webview")
     except ImportError as error:
+        if sys.platform.startswith("linux"):
+            raise RuntimeError(
+                "Linux app setup is incomplete. Open a terminal in the app folder "
+                "and run: bash install.sh\nThen start SkyScan from its application shortcut "
+                "or run: bash start.sh"
+            ) from error
         raise RuntimeError(
             "The desktop window dependency is missing. Install desktop-requirements.txt "
             "with the Python environment used to launch SkyScan. On Linux, also install "
@@ -144,7 +150,7 @@ def startup_message(error, log_file):
         # Specific runtime checks already name the installer that is needed.
         help_text = "See the startup log below for details."
     else:
-        help_text = "See the GTK/WebKit2GTK setup instructions in README.md."
+        help_text = "Open a terminal in the app folder and run: bash install.sh"
     return (f"SkyScan could not open its app window.\n\n{details}\n\n"
             f"{help_text}\n\nStartup log: {log_file}")
 

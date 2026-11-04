@@ -21,12 +21,18 @@ def main():
         for name in ("app.py", "desktop.py", "desktop-requirements.txt", "README.md"):
             shutil.copy2(ROOT / name, package / name)
         shutil.copytree(ROOT / "web", package / "web")
+        for name in ("install.sh", "start.sh", "linux_setup.py"):
+            shutil.copy2(ROOT / name, package / name)
+        for name in ("install.sh", "start.sh"):
+            (package / name).chmod(0o755)
         launcher = package / "MDZ-SkyScan.sh"
         shutil.copy2(ROOT / "packaging/linux/MDZ-SkyScan.sh", launcher)
         launcher.chmod(0o755)
         with tarfile.open(args.output / "MDZ-SkyScan-linux.tar.gz", "w:gz") as archive:
             archive.add(package, arcname=package.name)
         launcher.unlink()
+        for name in ("install.sh", "start.sh", "linux_setup.py"):
+            (package / name).unlink()
         shutil.copy2(ROOT / "packaging/windows/MDZ-SkyScan.cmd", package / "MDZ-SkyScan.cmd")
         with zipfile.ZipFile(args.output / "MDZ-SkyScan-windows-portable.zip", "w", zipfile.ZIP_DEFLATED) as archive:
             for path in sorted(package.rglob("*")):
